@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <meta name='viewport' content='width=device-width, initial-scale=1'>
+      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+      <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+      <style>
+         *{
+            box-sizing: border-box
+         }
+         body{
+            padding-top:100px;
+         }
+         .map{
+            margin: auto
+         }
+         .grid{
+            width:30px;
+            height:30px;
+            border:1px solid black;
+            position: relative;
+         }
+         .gridNo{
+            text-align: center;
+            background-color:white
+         }
+         .block{
+            background-color: brown;
+            border:1px solid black
+         }
+         #roomba{
+            position:absolute;
+            top:50%;
+            left:50%;
+            height:28px;
+            width:28px;
+            border-radius:50%;
+            background-color:burlywood;
+         }
+         #roomba:hover{
+            cursor: pointer;
+            opacity: 0.8;
+         }
+         #roomba::after{
+            content:'\22c6';
+            line-height: 9px;
+            font-size: 20px;
+            color:red;
+            position: absolute;
+            top:0;
+            left:50%;
+            transform: translateX(-50%)
+         }
+         .dir_top{
+            transform: translate(-50%,-50%) rotate(0deg) 
+         }
+         .dir_bottom{
+            transform: translate(-50%,-50%) rotate(180deg)
+         }
+         .dir_left{
+            transform: translate(-50%,-50%) rotate(-90deg)
+         }
+         .dir_right{
+            transform: translate(-50%,-50%) rotate(90deg)
+         }
+      </style>
+   </head>
+   <body>
+      <div id="roomMap">
+         <table class="table-success map">
+            <tr v-for="y in dimension.height+1">
+               <td v-for="x in dimension.width+1" 
+                    v-bind:class="gridClass(x-1,y-1)">
+                  <!-- 减去1是为了使得输入方程的数字能从0开始 -->
+                  <roomBa v-if="x-1==robot.pos.x&&y-1==robot.pos.y"
+                           v-bind='robot'
+                           v-bind:detected = 'blockDetection'
+                           v-on:forward="forward()"
+                           v-on:turn="turn($event)"
+                           v-on:detect='detect($event)'
+                  ></roomBa>
+                  {{gridContent(x-1,y-1)}}
+               </td>
+            </tr>
+         </table>
+      </div>
+      
+   </body>
+   <script>
+      Vue.component('roomba', {
+            props: {
+               pos: Object,
+               dir: Number,
+               detected:Object
+            },
+            template: `<div id='roomba' 
+                             v-on:click="run" 
+                             v-bind:class = "directionClass">
+                        </div>`,
+            computed:{
+               //不同方向时小车返回不同的CSS Class
+               directionClass:function(){
+                  switch(this.dir){
+                     case 0:
+                        return 'dir_top'
+                        break;
+                     case 1:
+                        return 'dir_left'
+                        break;
+                     case 2:
+                        return 'dir_bottom'
+                        break;
+                     case 3:
+                        return 'dir_right'
+                        break;
+                  }
+               }
+            },
+            methods: {
+               //小车的运行
+               run: function () {
+                  //this.forward()
+                  this.forward()
+                  this.turnRight()
+                  let a = this.detectFront();
+                  console.log('front' + a)
+               },
+               //小车的动作
+               forward() {
+                  return this.$emit('forward')
+               },
+               turnLeft() {
+                  return this.$emit('turn', 1)
+               },
+               turnRight() {
+                  return this.$emit('turn', -1)
+               },
+               //监测小车前左右有没有墙
+               detectFront(){
+                  return this.detected.front;
+               },
+               detectLeft(){
+                  return this.detected.left
+               },
+               detectRight(){
+                  return this.detected.right
+                  
+               }
+            }
+         })
+
+
+      let roomMap = new Vue({
+         el:'#roomMap',
+         data:{
+            //地图的长宽
+            dimension:{
+               width:15,
+               height:15
+            },
+            //障碍物的位置
+            blocks:[
+               {
+                  from:{x:9,y:4},
+                  to:{x:5,y:3}
+               },
+               {
+                  from:{x:1,y:13},
+                  to:{x:15,y:13}
+               },
+               {
+                  from:{x:13,y:14},
+                  to:{x:13,y:15}
+               }
+            ],
+            //小车的属性
+            robot:{
+               pos:{
+                  x:15,
+                  y:15
+               },
+               //top:0 left:1 bottom:2 right:3
+               dir:0,
+               //上、左、下、右对墙的监测情况
+            }
+         },
+         computed:{
+            //算出所有block的点
+            blockPos:function(){
+               let posGroup = [];
+               let blocks = this.blocks
+               for (let block of blocks) {
+                  let higherY = block.from.y > block.to.y?block.from.y:block.to.y;
+                  let lowerY = higherY == block.to.y? block.from.y: block.to.y;
+                  let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
+                  let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
+                  for (let y = lowerY; y <= higherY; y++) {
+                     for (let x = lowerX; x <= higherX; x++) {
+                        posGroup.push({x:x,y:y})
+                     }
+                  }
+               }
+               return posGroup
+            },
+            blockDetection:function(){
+               let {x,y} = this.robot.pos;
+               let dir = this.robot.dir;
+               let width = this.dimension.width;
+               let height = this.dimension.height;
+               let blockPos = this.blockPos
+               switch (dir) {
+                  case 0:
+                     return {front:detect(x,y-1),left:detect(x-1,y),right:detect(x+1,y)}
+                     break;
+                  case 1:
+                     return { front: detect(x-1, y), left: detect(x, y+1), right: detect(x, y-1) }
+                     break;
+                  case 2:
+                     return { front: detect(x, y+1), left: detect(x + 1, y), right: detect(x - 1, y) }
+                     break;
+                  case 3:
+                     return { front: detect(x+1, y), left: detect(x, y-1), right: detect(x, y+1) }
+                     break;
+               }
+               
+               function detect(x,y){
+                  if (x > width || x < 1 ||
+                     y > height || y < 1 ||
+                     blockPos.some(bPos => x == bPos.x && y == bPos.y)) {
+                     return true
+                  } else {
+                     return false
+                  }
+               }
+            }
+         },
+         methods:{
+            //算出每个block的属性
+            gridClass:function(x,y){
+               let block = this.blockPos.some(pos => pos.x == x&&pos.y == y);
+               if(block){
+                  return 'block'
+               }else if (x==0||y==0){
+                  return "gridNo"
+               }else{
+                  return 'grid'
+               }
+            },
+            //计算序列行
+            gridContent:function(x,y){
+               if(x==0&&y==0){
+                  //处理序列
+                  return null
+               }else if (x==0){
+                  return y;
+               }else if (y==0){
+                  return x;
+               }else{
+                  return null
+               }
+            },
+            //小车前进后位置同步
+            forward(){
+               let pos = this.robot.pos;
+               switch (Math.abs(this.robot.dir%4)) {
+                  case 0:
+                     //遇到障碍物及墙壁不能前行。
+                     if(pos.y - 1 >= 1
+                        &&!this.blockPos.some(bPos =>pos.x == bPos.x && pos.y -1 == bPos.y))
+                        pos.y--;
+                     break;
+                  case 2:
+                     if(pos.y + 1 <= this.dimension.height
+                        &&!this.blockPos.some(bPos => pos.x == bPos.x && pos.y +1 == bPos.y)) 
+                        pos.y ++;
+                     break;
+                  case 1:
+                     if (pos.x - 1 >= 1  
+                        &&!this.blockPos.some(bPos => pos.x - 1 == bPos.x && pos.y == bPos.y))
+                        pos.x --;
+                     break;
+                  case 3:
+                     if (pos.x + 1 <= this.dimension.width 
+                        &&!this.blockPos.some(bPos => pos.x +1 == bPos.x && pos.y == bPos.y))
+                        pos.x++;
+                     break;
+               }
+            },
+            //小车旋转后方向同步
+            turn(event){
+               let dir = this.robot.dir
+               dir += event;
+               if (dir == 4){
+                  this.robot.dir = 0
+               }else if (dir == -1){
+                  this.robot.dir = 3
+               }else{
+                  this.robot.dir = dir
+               }
+               return ;
+            }
+         }
+      })
+      
+   </script>
+</html>
