@@ -2,7 +2,7 @@
 <html>
    <head>
       <meta name='viewport' content='width=device-width, initial-scale=1'>
-      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+      <link rel="stylesheet" href="./bootstrap-4.3.1-dist/css/bootstrap.css">
       <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
       <style>
          *{
@@ -38,6 +38,7 @@
             border-radius:50%;
             background-color:burlywood;
             z-index:1;
+            transition: all 1s linear
          }
          #roomba:hover{
             cursor: pointer;
@@ -54,16 +55,16 @@
             transform: translateX(-50%)
          }
          .dir_top{
-            transform: translate(-50%,-50%) rotate(0deg) 
+            transform: translate(-50%,-50%) rotate(0deg) ;
          }
          .dir_bottom{
-            transform: translate(-50%,-50%) rotate(180deg)
+            transform: translate(-50%,-50%) rotate(180deg);
          }
          .dir_left{
-            transform: translate(-50%,-50%) rotate(-90deg)
+            transform: translate(-50%,-50%) rotate(-90deg);
          }
          .dir_right{
-            transform: translate(-50%,-50%) rotate(90deg)
+            transform: translate(-50%,-50%) rotate(90deg);
          }
       </style>
    </head>
@@ -77,8 +78,13 @@
                   {{gridContent(x-1,y-1)}}
                </td>
             </tr>
-            <roomBa v-bind:robot='robot' v-on:forward="forward()" v-on:turn="turn($event)" v-on:detect="detected($event)"
-               ></roomBa>
+            <transition>
+               <roomBa v-bind:robot='robot' 
+                        v-on:forward="forward()" 
+                        v-on:turn="turn($event)" 
+                        v-on:detect="detected($event)"
+                        key="roomBa"></roomBa>
+            </transition>
          </table>
       </div>
       
@@ -87,6 +93,11 @@
       Vue.component('roomba', {
             props: {
                robot:Object,
+            },
+            data:function(){
+               return {
+                  moveSpeed:1000
+               }
             },
             template: `
                         <div id='roomba' 
@@ -114,19 +125,45 @@
             },
             methods: {
                //小车的运行
-               run: function () {
-                  
-                  this.turnLeft()
+               run: async function () {
+                  //await this.turnLeft()
+                  await this.forward();
+                  //await this.forward();
+                  //await this.turnLeft();
+                  //await this.forward();
+                  //await this.forward();
+                  //await this.turnRight();
+                  //await this.forward();
+                  //await this.forward();
                },
                //小车的动作
                forward() {
-                  this.$emit('forward')
+                  let dom = document.querySelector('#roomba');
+                  let self = this;
+                  return new Promise((resolve)=>{
+                     self.$emit('forward')
+                     setTimeout(()=>{
+                        resolve(true)
+                     },self.moveSpeed)
+                  })
                },
                turnLeft() {
-                  return this.$emit('turn', 1)
+                  let self = this;
+                  return new Promise((resolve) => {
+                     self.$emit('turn', 1)
+                     setTimeout(() => {
+                        resolve(true)
+                     }, self.moveSpeed)
+                  })
                },
                turnRight() {
-                  return this.$emit('turn', -1)
+                  let self = this;
+                  return new Promise((resolve) => {
+                     self.$emit('turn', -1)
+                     setTimeout(() => {
+                        resolve(true)
+                     },self.moveSpeed)
+                  })
                },
                //监测小车前左右有没有墙
                detectFront(){
@@ -265,7 +302,6 @@
                }else{
                   this.robot.dir = dir
                }
-               this.moveRoomba()
                return ;
             },
             moveRoomba(){
