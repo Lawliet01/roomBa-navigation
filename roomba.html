@@ -12,7 +12,8 @@
             padding-top:100px;
          }
          .map{
-            margin: auto
+            margin: auto;
+            position: relative;
          }
          .grid{
             width:30px;
@@ -36,6 +37,7 @@
             width:28px;
             border-radius:50%;
             background-color:burlywood;
+            z-index:1;
          }
          #roomba:hover{
             cursor: pointer;
@@ -72,15 +74,11 @@
                <td v-for="x in dimension.width+1" 
                     v-bind:class="gridClass(x-1,y-1)">
                   <!-- 减去1是为了使得输入方程的数字能从0开始 -->
-                  <roomBa v-if="x-1==robot.pos.x&&y-1==robot.pos.y"
-                           v-bind:robot='robot'
-                           v-on:forward="forward()"
-                           v-on:turn="turn($event)"
-                           v-on:detect="detected($event)"
-                  ></roomBa>
                   {{gridContent(x-1,y-1)}}
                </td>
             </tr>
+            <roomBa v-bind:robot='robot' v-on:forward="forward()" v-on:turn="turn($event)" v-on:detect="detected($event)"
+               ></roomBa>
          </table>
       </div>
       
@@ -90,7 +88,8 @@
             props: {
                robot:Object,
             },
-            template: `<div id='roomba' 
+            template: `
+                        <div id='roomba' 
                              v-on:click="run" 
                              v-bind:class = "directionClass">
                         </div>`,
@@ -116,14 +115,12 @@
             methods: {
                //小车的运行
                run: function () {
-                  this.forward()
-                  this.turnRight()
-                  this.detectRight()
-                  console.log(this.robot.lastDetected)
+                  
+                  this.turnLeft()
                },
                //小车的动作
                forward() {
-                  return this.$emit('forward')
+                  this.$emit('forward')
                },
                turnLeft() {
                   return this.$emit('turn', 1)
@@ -148,6 +145,9 @@
 
       let roomMap = new Vue({
          el:'#roomMap',
+         mounted: function () {
+            return this.moveRoomba()
+         },
          data:{
             //地图的长宽
             dimension:{
@@ -160,20 +160,20 @@
                   from:{x:9,y:4},
                   to:{x:5,y:3}
                },
-               {
-                  from:{x:1,y:13},
-                  to:{x:15,y:13}
-               },
-               {
-                  from:{x:13,y:14},
-                  to:{x:13,y:15}
-               }
+               //{
+               //   from:{x:1,y:13},
+               //   to:{x:15,y:13}
+               //},
+               //{
+               //   from:{x:13,y:14},
+               //   to:{x:13,y:15}
+               //}
             ],
             //小车的属性
             robot:{
                pos:{
-                  x:15,
-                  y:15
+                  x:10,
+                  y:10
                },
                //top:0 left:1 bottom:2 right:3
                dir:0,
@@ -251,6 +251,8 @@
                         pos.x++;
                      break;
                }
+               this.moveRoomba()
+               return;
             },
             //小车旋转后方向同步
             turn(event){
@@ -263,7 +265,17 @@
                }else{
                   this.robot.dir = dir
                }
+               this.moveRoomba()
                return ;
+            },
+            moveRoomba(){
+               let table = document.querySelector('.map')
+               if (!table) return;
+               let y = this.robot.pos.y;
+               let x = this.robot.pos.x;
+               let roomBa = document.querySelector('#roomba');
+               table.children[0].children[y].children[x].appendChild(roomBa)
+               return;
             },
             //监测障碍物
             detected(event){
@@ -278,8 +290,6 @@
                      break;
                   case 1:
                      this.detectBlock(x-1, y)
-                     console.log('happy');
-                     
                      break;
                   case 2:
                      this.detectBlock(x, y + 1)
@@ -300,7 +310,7 @@
                   this.robot.lastDetected = false
                   return;
                }
-            }
+            },
          }
       })
       
