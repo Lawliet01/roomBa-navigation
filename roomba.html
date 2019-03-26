@@ -73,11 +73,10 @@
                     v-bind:class="gridClass(x-1,y-1)">
                   <!-- 减去1是为了使得输入方程的数字能从0开始 -->
                   <roomBa v-if="x-1==robot.pos.x&&y-1==robot.pos.y"
-                           v-bind='robot'
-                           v-bind:detected = 'blockDetection'
+                           v-bind:robot='robot'
                            v-on:forward="forward()"
                            v-on:turn="turn($event)"
-                           v-on:detect='detect($event)'
+                           v-on:detect="detected($event)"
                   ></roomBa>
                   {{gridContent(x-1,y-1)}}
                </td>
@@ -89,9 +88,7 @@
    <script>
       Vue.component('roomba', {
             props: {
-               pos: Object,
-               dir: Number,
-               detected:Object
+               robot:Object,
             },
             template: `<div id='roomba' 
                              v-on:click="run" 
@@ -100,7 +97,7 @@
             computed:{
                //不同方向时小车返回不同的CSS Class
                directionClass:function(){
-                  switch(this.dir){
+                  switch(this.robot.dir){
                      case 0:
                         return 'dir_top'
                         break;
@@ -119,11 +116,10 @@
             methods: {
                //小车的运行
                run: function () {
-                  //this.forward()
                   this.forward()
                   this.turnRight()
-                  let a = this.detectFront();
-                  console.log('front' + a)
+                  this.detectRight()
+                  console.log(this.robot.lastDetected)
                },
                //小车的动作
                forward() {
@@ -137,13 +133,13 @@
                },
                //监测小车前左右有没有墙
                detectFront(){
-                  return this.detected.front;
+                  return this.$emit('detect',0)
                },
                detectLeft(){
-                  return this.detected.left
+                  return this.$emit('detect', 1)
                },
                detectRight(){
-                  return this.detected.right
+                  return this.$emit('detect', -1)
                   
                }
             }
@@ -181,7 +177,8 @@
                },
                //top:0 left:1 bottom:2 right:3
                dir:0,
-               //上、左、下、右对墙的监测情况
+               //上一次对墙的监测情况
+               lastDetected:false
             }
          },
          computed:{
@@ -201,37 +198,6 @@
                   }
                }
                return posGroup
-            },
-            blockDetection:function(){
-               let {x,y} = this.robot.pos;
-               let dir = this.robot.dir;
-               let width = this.dimension.width;
-               let height = this.dimension.height;
-               let blockPos = this.blockPos
-               switch (dir) {
-                  case 0:
-                     return {front:detect(x,y-1),left:detect(x-1,y),right:detect(x+1,y)}
-                     break;
-                  case 1:
-                     return { front: detect(x-1, y), left: detect(x, y+1), right: detect(x, y-1) }
-                     break;
-                  case 2:
-                     return { front: detect(x, y+1), left: detect(x + 1, y), right: detect(x - 1, y) }
-                     break;
-                  case 3:
-                     return { front: detect(x+1, y), left: detect(x, y-1), right: detect(x, y+1) }
-                     break;
-               }
-               
-               function detect(x,y){
-                  if (x > width || x < 1 ||
-                     y > height || y < 1 ||
-                     blockPos.some(bPos => x == bPos.x && y == bPos.y)) {
-                     return true
-                  } else {
-                     return false
-                  }
-               }
             }
          },
          methods:{
@@ -298,6 +264,42 @@
                   this.robot.dir = dir
                }
                return ;
+            },
+            //监测障碍物
+            detected(event){
+               let {x,y} = this.robot.pos;
+               let dir = this.robot.dir + event;
+               if(dir == 4) dir = 0;
+               if (dir== -1) dir=3; 
+               //0 上边， 1 左边 , 2 下边， 3 右边
+               switch (dir) {
+                  case (0):
+                     this.detectBlock(x,y-1)
+                     break;
+                  case 1:
+                     this.detectBlock(x-1, y)
+                     console.log('happy');
+                     
+                     break;
+                  case 2:
+                     this.detectBlock(x, y + 1)
+                     break;
+                  case (3):
+                     this.detectBlock(x +1, y)
+                     break;
+               }
+            },
+            //测试（x，y）处是否有障碍物
+            detectBlock(x,y){
+               if (x > this.dimension.width || x < 1 ||
+                  y > this.dimension.height || y < 1 ||
+                  this.blockPos.some(bPos => x == bPos.x && y == bPos.y)) {
+                  this.robot.lastDetected = true;
+                  return;
+               } else {
+                  this.robot.lastDetected = false
+                  return;
+               }
             }
          }
       })
