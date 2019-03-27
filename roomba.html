@@ -1,462 +1,614 @@
 <!DOCTYPE html>
 <html>
-   <head>
-      <link rel="stylesheet" href="./bootstrap-4.3.1-dist/css/bootstrap.css">
-      <script src="./vue.js"></script>
-      <style>
-         *{
-            box-sizing: border-box;
-            overflow: hidden;
+
+<head>
+   <link rel="stylesheet" href="./bootstrap-4.3.1-dist/css/bootstrap.css">
+   <script src="./vue.js"></script>
+   <style>
+      * {
+         box-sizing: border-box;
+         overflow: hidden;
+      }
+
+      .map {
+         position: relative;
+      }
+
+      .grid {
+         min-width: 20px;
+         height: 20px;
+         position: relative;
+         border-width: 1px;
+         border-style: solid
+      }
+
+      .gridNo {
+         text-align: center;
+         background-color: white;
+         font-size: 10px;
+      }
+
+      .block {
+         background-color: rgb(206, 105, 74);
+      }
+
+      #roomba {
+         position: absolute;
+         height: 18px;
+         width: 18px;
+         border-radius: 50%;
+         background-color: burlywood;
+         z-index: 1;
+         transition: all 0.01s linear
+      }
+
+      #roomba:hover {
+         cursor: pointer;
+         opacity: 0.8;
+      }
+
+      #roomba::after {
+         content: '\22c6';
+         line-height: 9px;
+         font-size: 20px;
+         color: red;
+         position: absolute;
+         top: 0;
+         left: 50%;
+         transform: translateX(-50%)
+      }
+
+      .dir_top {
+         transform: rotate(0deg);
+      }
+
+      .dir_bottom {
+         transform: rotate(180deg);
+      }
+
+      .dir_left {
+         transform: rotate(-90deg);
+      }
+
+      .dir_right {
+         transform: rotate(90deg);
+      }
+   </style>
+</head>
+
+<body>
+   <div id="roomMap">
+      <table class="table-secondary map">
+         <tr v-for="y in dimension.height+1">
+            <td v-for="x in dimension.width+1" v-bind:class="gridClass(x-1,y-1)"
+               v-bind:style="cleanedGridStyle(x-1,y-1)">
+               <!-- 减去1是为了使得输入方程的数字能从0开始 -->
+               {{gridContent(x-1,y-1)}}
+            </td>
+         </tr>
+         <transition>
+            <roomBa v-bind:robot='robot' v-bind:map='map' v-on:forward="forward()" v-on:turn="turn($event)"
+               v-on:detect="detected($event)"></roomBa>
+         </transition>
+      </table>
+   </div>
+
+</body>
+<script>
+   Vue.component('roomba', {
+      props: {
+         robot: Object,
+         map: Array
+      },
+      data: function () {
+         return {
+            moveSpeed: 10,
+            lastCount: 0,
+            currentCount: 0
          }
-         .map{
-            position: relative;
-         }
-         .grid{
-            min-width:30px;
-            height:30px;
-            position: relative;
-            border-width:1px;
-            border-style:solid 
-         }
-         .gridNo{
-            text-align: center;
-            background-color:white
-         }
-         .block{
-            background-color: brown;
-         }
-         #roomba{
-            position:absolute;
-            height:28px;
-            width:28px;
-            border-radius:50%;
-            background-color:burlywood;
-            z-index:1;
-            transition: all 0.01s linear
-         }
-         #roomba:hover{
-            cursor: pointer;
-            opacity: 0.8;
-         }
-         #roomba::after{
-            content:'\22c6';
-            line-height: 9px;
-            font-size: 20px;
-            color:red;
-            position: absolute;
-            top:0;
-            left:50%;
-            transform: translateX(-50%)
-         }
-         .dir_top{
-            transform:rotate(0deg) ;
-         }
-         .dir_bottom{
-            transform: rotate(180deg);
-         }
-         .dir_left{
-            transform: rotate(-90deg);
-         }
-         .dir_right{
-            transform:rotate(90deg);
-         }
-         .cleanGrid{
-            background-color:#5bc774;
-            border-color:#28a745;
-         }
-      </style>
-   </head>
-   <body>
-      <div id="roomMap">
-         <table class="table-secondary map">
-            <tr v-for="y in dimension.height+1">
-               <td v-for="x in dimension.width+1" 
-                    v-bind:class="gridClass(x-1,y-1)"
-                    v-bind:style="cleanedGridStyle(x-1,y-1)">
-                  <!-- 减去1是为了使得输入方程的数字能从0开始 -->
-                  {{gridContent(x-1,y-1)}}
-               </td>
-            </tr>
-            <transition>
-               <roomBa v-bind:robot='robot' 
-                        v-on:forward="forward()" 
-                        v-on:turn="turn($event)" 
-                        v-on:detect="detected($event)"
-                        ></roomBa>
-            </transition>
-         </table>
-      </div>
-      
-   </body>
-   <script>
-      Vue.component('roomba', {
-            props: {
-               robot:Object,
-            },
-            data:function(){
-               return {
-                  moveSpeed:10,
-                  lastCount:0,
-                  currentCount:0
-               }
-            },
-            template: `
+      },
+      template: `
                         <div id='roomba' 
                              v-on:click="run" 
                              v-bind:class = "directionClass">
                         </div>`,
-            computed:{
-               //不同方向时小车返回不同的CSS Class
-               directionClass:function(){
-                  switch(this.robot.dir){
-                     case 0:
-                        return 'dir_top'
-                        break;
-                     case 1:
-                        return 'dir_left'
-                        break;
-                     case 2:
-                        return 'dir_bottom'
-                        break;
-                     case 3:
-                        return 'dir_right'
-                        break;
+      computed: {
+         //不同方向时小车返回不同的CSS Class
+         directionClass: function () {
+            switch (this.robot.dir) {
+               case 0:
+                  return 'dir_top'
+                  break;
+               case 1:
+                  return 'dir_left'
+                  break;
+               case 2:
+                  return 'dir_bottom'
+                  break;
+               case 3:
+                  return 'dir_right'
+                  break;
+            }
+         },
+         tasks: function () {
+            let events = [];
+            let self = this;
+            let columnSeperate = compileMap(this.map);
+            let insertedEvent = []
+            combinedEvent()
+            events = events.map(e => { return analyzeEvent(self, e) })
+            return insertedMoveIntoEvent(events,self)
+            
+            //解析列地图
+            function compileMap(map){
+               let columnArray = [];
+               for (let x = map[0].length - 1; x >= 0; x--) {
+                  let column = [];
+                  for (let y = 0; y < map.length; y++) {
+                     column.push(map[y][x])
                   }
-               },
-               tasks:function(){
-                  return ['a','b','c']
+                  columnArray.push(column)
                }
-            },
-            methods: {
-               //小车的运行
-               run: async function () {
-                  await this.basicMoveMent()
-                  await this.moveIntoSubevent();
-                  await this.basicMoveMent()
-                  await this.basicMoveMent()
-                  await this.basicMoveMent()
-                  await this.moveIntoSubevent();
-                  await this.basicMoveMent()
-                  await this.basicMoveMent()
-                  await this.lastEventExcuted()
-                  console.log('done')
-               },
-               //基础的行径 && 空事件的行径
-               basicMoveMent(){
-                  return new Promise(async resolve=>{
-                     //对是否结束当前行动的根据是：count是否不一样以及左边是不是靠墙了
-                     do {
-                        await this.lineMovement()
-                     } while ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectLeft() == false)
-                     resolve(true)
-                  })
-               },
-               //进入下一子事件
-               moveIntoSubevent(){
-                  return new Promise(async resolve=>{
-                     do{
-                        await this.forward()
-                     }while(this.detectRight() == false)
-                     do {
-                        await this.forward()
-                     } while (this.detectRight() == true)
-                     await this.turnRight()
-                     while(true){
-                        await this.forward()
-                        if(this.detectRight() == false){
-                           await this.goBackOneGrid()
-                           break;
-                        }else if(this.detectFront()== true){
-                           await this.turnLeft()
-                           break;
-                        }else{
-                           continue
-                        }
-                     }
-                     this.lastCount = this.currentCount = 0;
-                     resolve(true)
-                  })
-               },
-               //处理最后一个事件
-               lastEventExcuted(){
-                  //未完成,暂时是一个来回
-                  return new Promise(async resolve=>{
-                     while (this.detectFront() == false) {
-                        await this.forward()
-                     }
-                     await this.turnLeft()
-                     await this.turnLeft()
-                     while (this.detectFront() == false) {
-                        await this.forward()
-                     }
-                  })
-               },
-               //往后退一格
-               goBackOneGrid(){
-                  return new Promise(async resolve=>{
-                     await this.turnLeft();
-                     await this.turnLeft();
-                     await this.forward();
-                     await this.turnRight()
-                     resolve(true)
-                  })
-               },
-               //每行的行径
-               lineMovement(){
-                  return new Promise(async resolve=>{
-                     //重置时间
-                     this.lastCount = this.currentCount;
-                     this.currentCount = 0;
-                     //开始运行
-                     while (this.detectFront() == false) {
-                        await this.forward()
-                     }
-                     await this.turnLeft()
-                     await this.turnLeft()
-                     while (this.detectFront() == false) {
-                        this.currentCount ++;
-                        await this.forward()
-                     }
-                     await this.turnRight()
-                     //监测下一列是不是墙，如果是，停止行动。
-                     //如果要触发下一事件，则不会进入下一列中
-                     if((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectFront() == false)
-                     await this.forward()
-                     await this.turnRight()
-                     resolve(true)
-                  })
-               },
-               //小车的动作
-               forward() {
-                  let dom = document.querySelector('#roomba');
-                  let self = this;
-                  return new Promise((resolve)=>{
-                     self.$emit('forward')
-                     setTimeout(()=>{
-                        resolve(true)
-                     },self.moveSpeed)
-                  })
-               },
-               turnLeft() {
-                  let self = this;
-                  return new Promise((resolve) => {
-                     self.$emit('turn', 1)
-                     setTimeout(() => {
-                        resolve(true)
-                     }, self.moveSpeed)
-                  })
-               },
-               turnRight() {
-                  let self = this;
-                  return new Promise((resolve) => {
-                     self.$emit('turn', -1)
-                     setTimeout(() => {
-                        resolve(true)
-                     },self.moveSpeed)
-                  })
-               },
-               //监测小车前左右有没有墙
-               detectFront(){
-                  this.$emit('detect',0)
-                  return this.robot.lastDetected
-               },
-               detectLeft(){
-                  this.$emit('detect', 1)
-                  return this.robot.lastDetected
-               },
-               detectRight(){
-                  this.$emit('detect', -1)
-                  return this.robot.lastDetected
+               return columnArray
+            }
+            //把列地图分成事件
+            //相同的列为同一事件中
+            function combinedEvent(from,count = 0) {
+               let currentEvent = columnSeperate.shift();
+               if (currentEvent == undefined) return;
+               if (JSON.stringify(currentEvent) != JSON.stringify(from)) {
+                  events.push(currentEvent)
+                  from = currentEvent;
+                  count = 0
+               }else {
+                  count ++
+               }
+               return combinedEvent(from,count)
+            }
+            //分析每个事件
+            //只考虑了非重叠事件
+            function analyzeEvent(self, event) {
+               if (event.shift() == 'x') {
+                  return {
+                     eventName: 'topEvent',
+                     f: self.basicMoveMent
+                  }
+               } else if (event.pop() == 'x') {
+                  return {
+                     eventName: 'bottomEvent',
+                     f: self.basicMoveMent
+                  }
+               } else if (event.some(b => b == 'x')) {
+                  return {
+                     eventName: 'middleEvent',
+                     f: self.middleEvent
+                  }
+               } else {
+                  return {
+                     eventName: 'emptyEvent',
+                     f: self.basicMoveMent
+                  }
                }
             }
-         })
-
-
-      let roomMap = new Vue({
-         el:'#roomMap',
-         mounted: function () {
-            return this.moveRoomba()
-         },
-         data:{
-            //地图的长宽
-            dimension:{
-               width:15,
-               height:15,
-               gridWidth:30
-            },
-            //障碍物的位置
-            blocks:[
-               {
-                  from:{x:9,y:4},
-                  to:{x:5,y:3}
-               },
-               {
-                  from: { x: 11, y: 7 },
-                  to: { x: 15, y: 10 }
-               },
-            ],
-            //小车的属性
-            robot:{
-               pos:{
-                  x:15,
-                  y:15
-               },
-               //top:0 left:1 bottom:2 right:3
-               dir:0,
-               //上一次对墙的监测情况
-               lastDetected:false
-            },
-            cleanedGrid:[]
-         },
-         computed:{
-            //算出所有block的点
-            blockPos:function(){
-               let posGroup = [];
-               let blocks = this.blocks
-               for (let block of blocks) {
-                  let higherY = block.from.y > block.to.y?block.from.y:block.to.y;
-                  let lowerY = higherY == block.to.y? block.from.y: block.to.y;
-                  let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
-                  let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
-                  for (let y = lowerY; y <= higherY; y++) {
-                     for (let x = lowerX; x <= higherX; x++) {
-                        posGroup.push({x:x,y:y})
-                     }
+            //插入 进入事件
+            function moveIntoEventCalculate(from,to,self){
+               if((from.eventName == 'topEvent'||to.eventName == 'bottomEvent')||
+                  (from.eventName == 'emptyEvent' || to.eventName == 'bottomEvent')){
+                     console.log('happy');
+                  return {
+                     eventName:'moveIntoNextBottomEvent',
+                     f:self.moveIntoNextBottomEvent
+                  }
+               }else{
+                  return {
+                     eventName: 'basicNextEvent',
+                     f:self.basicMoveIntoNextEvent
                   }
                }
-               return posGroup
-            },
-         },
-         methods:{
-            //算出每个block的属性
-            gridClass:function(x,y){
-               let className = "" 
-               let block = this.blockPos.some(pos => pos.x == x&&pos.y == y);
-               if(block){
-                  className += 'block '
-               }else if (x==0||y==0){
-                  className += "gridNo "
-               }else{
-                  className += 'grid '
+            }
+            function insertedMoveIntoEvent(basicEvents,self){
+               let insertedEvent = [];
+               for(let i =0;i<basicEvents.length-1;i++){
+                  insertedEvent.push(basicEvents[i]);
+                  insertedEvent.push(moveIntoEventCalculate(basicEvents[i],basicEvents[i+1],self))
                }
-               return className 
-            },
-            //已被清洁的点
-            cleanedGridStyle(x,y){
-               if (this.cleanedGrid.some(pos => pos.x == x && pos.y == y))
-               return "background-color:#5bc774;border-color:#5bc774;"
-            },
-            //计算序列行
-            gridContent:function(x,y){
-               if(x==0&&y==0){
-                  //处理序列
-                  return null
-               }else if (x==0){
-                  return y;
-               }else if (y==0){
-                  return x;
-               }else{
-                  return null
-               }
-            },
-            //小车前进后位置同步
-            forward(){
-               let pos = this.robot.pos;
-               let {x,y} = pos;
-               if(!this.cleanedGrid.some(c=>c.x == x&&c.y == y)){
-                  this.cleanedGrid.push({ x:x, y: y })
-               }
-               switch (Math.abs(this.robot.dir%4)) {
-                  case 0:
-                     //遇到障碍物及墙壁不能前行。
-                     if(pos.y - 1 >= 1
-                        &&!this.blockPos.some(bPos =>pos.x == bPos.x && pos.y -1 == bPos.y))
-                        pos.y--;
-                     break;
-                  case 2:
-                     if(pos.y + 1 <= this.dimension.height
-                        &&!this.blockPos.some(bPos => pos.x == bPos.x && pos.y +1 == bPos.y)) 
-                        pos.y ++;
-                     break;
-                  case 1:
-                     if (pos.x - 1 >= 1  
-                        &&!this.blockPos.some(bPos => pos.x - 1 == bPos.x && pos.y == bPos.y))
-                        pos.x --;
-                     break;
-                  case 3:
-                     if (pos.x + 1 <= this.dimension.width 
-                        &&!this.blockPos.some(bPos => pos.x +1 == bPos.x && pos.y == bPos.y))
-                        pos.x++;
-                     break;
-               }
-               if (x == pos.x && y == pos.y) 
-               console.log(`hit at ${x},${y}`)
-
-               this.moveRoomba()
-               return;
-            },
-            //小车旋转后方向同步
-            turn(event){
-               let dir = this.robot.dir
-               dir += event;
-               if (dir == 4){
-                  this.robot.dir = 0
-               }else if (dir == -1){
-                  this.robot.dir = 3
-               }else{
-                  this.robot.dir = dir
-               }
-               return ;
-            },
-            moveRoomba(){
-               let table = document.querySelector('.map')
-               if (!table) return;
-               let yGrid = this.robot.pos.y;
-               let xGrid = this.robot.pos.x;
-               let roomBa = document.querySelector('#roomba');
-               let targetGrid = table.children[0].children[yGrid].children[xGrid];
-               let {x,y} = targetGrid.getBoundingClientRect();
-               //改变位置
-               roomBa.style.top = y +1.5 + 'px';
-               roomBa.style.left = x +1.5 +'px'
-               return;
-            },
-            //监测障碍物
-            detected(event){
-               let {x,y} = this.robot.pos;
-               let dir = this.robot.dir + event;
-               if(dir == 4) dir = 0;
-               if (dir== -1) dir=3; 
-               //0 上边， 1 左边 , 2 下边， 3 右边
-               switch (dir) {
-                  case (0):
-                     this.detectBlock(x,y-1)
-                     break;
-                  case 1:
-                     this.detectBlock(x-1, y)
-                     break;
-                  case 2:
-                     this.detectBlock(x, y + 1)
-                     break;
-                  case (3):
-                     this.detectBlock(x +1, y)
-                     break;
-               }
-            },
-            //测试（x，y）处是否有障碍物
-            detectBlock(x,y){
-               if (x > this.dimension.width || x < 1 ||
-                  y > this.dimension.height || y < 1 ||
-                  this.blockPos.some(bPos => x == bPos.x && y == bPos.y)) {
-                  this.robot.lastDetected = true;
-                  return;
-               } else {
-                  this.robot.lastDetected = false
-                  return;
-               }
-            },
+               insertedEvent.push(basicEvents.pop())
+               //插入最后一行的event
+               insertedEvent.push({
+                  eventName:'lastColumnEvent',
+                  f:self.lastColumnExcuted
+               })
+               return insertedEvent
+            }
          }
-      })
-      
-   </script>
+      },
+      methods: {
+         //小车的运行
+         run: async function () {
+            while(this.tasks.length>0){
+               let task = this.tasks.shift();
+               console.log('Excute: '+task.eventName)
+               await task.f()
+            }
+            console.log('done')
+         },
+         //处理middleEvent
+         middleEvent() {
+            return new Promise(async resolve => {
+               await this.basicMoveMent()
+               await this.moveIntoSubevent();
+               await this.basicMoveMent()
+               resolve(true)
+            })
+         },
+         //进入下一子事件
+         moveIntoSubevent() {
+            return new Promise(async resolve => {
+               do {
+                  await this.forward()
+               } while (this.detectRight() == false)
+               do {
+                  await this.forward()
+               } while (this.detectRight() == true)
+               await this.turnRight()
+               while (true) {
+                  await this.forward()
+                  if (this.detectRight() == false) {
+                     await this.goBackOneGrid()
+                     break;
+                  } else if (this.detectFront() == true) {
+                     await this.turnLeft()
+                     break;
+                  } else {
+                     continue
+                  }
+               }
+               this.lastCount = this.currentCount = 0;
+               resolve(true)
+            })
+         },
+         //普通进入下一事件
+         basicMoveIntoNextEvent() {
+            return new Promise(async resolve => {
+               await this.turnLeft();
+               await this.forward();
+               await this.turnRight();
+               this.lastCount = this.currentCount = 0;
+               resolve(true)
+            })
+         },
+         //进入下一bottom事件
+         moveIntoNextBottomEvent() {
+            return new Promise(async resolve => {
+               while (this.detectLeft() == true) {
+                  await this.forward()
+               }
+               await this.turnLeft()
+               await this.forward()
+               await this.turnRight();
+               this.lastCount = this.currentCount = 0;
+               resolve(true)
+            })
+         },
+         //基础的行径 && 空事件 && top事件的行径
+         basicMoveMent: function () {
+            return new Promise(async resolve => {
+               //对是否结束当前行动的根据是：count是否不一样以及左边是不是靠墙了
+               do {
+                  await this.lineMovement()
+               } while ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectLeft() == false)
+               resolve(true)
+            })
+         },
+         //处理最后一个事件
+         lastColumnExcuted() {
+            //未完成,暂时是一个来回
+            return new Promise(async resolve => {
+               while (this.detectFront() == false) {
+                  await this.forward()
+               }
+               await this.turnLeft()
+               await this.turnLeft()
+               while (this.detectFront() == false) {
+                  await this.forward()
+               }
+               resolve(true)
+            })
+         },
+         //往后退一格
+         goBackOneGrid() {
+            return new Promise(async resolve => {
+               await this.turnLeft();
+               await this.turnLeft();
+               await this.forward();
+               await this.turnRight()
+               resolve(true)
+            })
+         },
+         //每行的行径
+         lineMovement() {
+            return new Promise(async resolve => {
+               //重置时间
+               this.lastCount = this.currentCount;
+               this.currentCount = 0;
+               //开始运行
+               while (this.detectFront() == false) {
+                  await this.forward()
+               }
+               await this.turnLeft()
+               await this.turnLeft()
+               while (this.detectFront() == false) {
+                  this.currentCount++;
+                  await this.forward()
+               }
+               await this.turnRight()
+               //监测下一列是不是墙，如果是，停止行动。
+               //如果要触发下一事件，则不会进入下一列中
+               if ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectFront() == false)
+                  await this.forward()
+               await this.turnRight()
+               resolve(true)
+            })
+         },
+         //小车的动作
+         forward() {
+            let dom = document.querySelector('#roomba');
+            let self = this;
+            return new Promise((resolve) => {
+               self.$emit('forward')
+               setTimeout(() => {
+                  resolve(true)
+               }, self.moveSpeed)
+            })
+         },
+         turnLeft() {
+            let self = this;
+            return new Promise((resolve) => {
+               self.$emit('turn', 1)
+               setTimeout(() => {
+                  resolve(true)
+               }, self.moveSpeed)
+            })
+         },
+         turnRight() {
+            let self = this;
+            return new Promise((resolve) => {
+               self.$emit('turn', -1)
+               setTimeout(() => {
+                  resolve(true)
+               }, self.moveSpeed)
+            })
+         },
+         //监测小车前左右有没有墙
+         detectFront() {
+            this.$emit('detect', 0)
+            return this.robot.lastDetected
+         },
+         detectLeft() {
+            this.$emit('detect', 1)
+            return this.robot.lastDetected
+         },
+         detectRight() {
+            this.$emit('detect', -1)
+            return this.robot.lastDetected
+         }
+      }
+   })
+
+
+   let roomMap = new Vue({
+      el: '#roomMap',
+      mounted: function () {
+         this.robot.pos.x = this.dimension.width;
+         this.robot.pos.y = this.dimension.height
+         return this.moveRoomba()
+      },
+      data: {
+         //地图的长宽
+         dimension: {
+            width: 20,
+            height: 20,
+            gridWidth: 20
+         },
+         //障碍物的位置
+         //障碍物位置是从1开始的，第0行是序列行
+         blocks: [
+            {
+               from: { x: 3, y: 1 },
+               to: { x: 5, y: 3 }
+            },
+            {
+               from: { x: 8, y: 6 },
+               to: { x: 12, y: 12 }
+            },
+            {
+               from:{x:15,y:16},
+               to:{x:18,y:20}
+            },
+            //{
+            //   from: {x:25,y:9},
+            //   to: {x:28,y:11}
+            //},
+         ],
+         //小车的属性
+         //位置从1开始算
+         robot: {
+            pos: {
+               x: 15,
+               y: 15
+            },
+            //top:0 left:1 bottom:2 right:3
+            dir: 0,
+            //上一次对墙的监测情况
+            lastDetected: false
+         },
+         cleanedGrid: []
+      },
+      computed: {
+         //算出所有block的点
+         blockPos: function () {
+            let posGroup = [];
+            let blocks = this.blocks
+            for (let block of blocks) {
+               let higherY = block.from.y > block.to.y ? block.from.y : block.to.y;
+               let lowerY = higherY == block.to.y ? block.from.y : block.to.y;
+               let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
+               let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
+               for (let y = lowerY; y <= higherY; y++) {
+                  for (let x = lowerX; x <= higherX; x++) {
+                     posGroup.push({ x: x, y: y })
+                  }
+               }
+            }
+            return posGroup
+         },
+         //返回包含每行grid的array
+         map: function () {
+            let map = []
+            for (let y = 1; y < this.dimension.height + 1; y++) {
+               let row = [];
+               for (let x = 1; x < this.dimension.width + 1; x++) {
+                  if (this.blockPos.some(pos => pos.x == x && pos.y == y)) {
+                     row.push('x')
+                  } else {
+                     row.push('.')
+                  }
+               }
+               map.push(row)
+            }
+            return map
+         }
+      },
+      methods: {
+         //算出每个block的属性
+         gridClass: function (x, y) {
+            let className = ""
+            let block = this.blockPos.some(pos => pos.x == x && pos.y == y);
+            if (block) {
+               className += 'block '
+            } else if (x == 0 || y == 0) {
+               className += "gridNo "
+            } else {
+               className += 'grid '
+            }
+            return className
+         },
+         //已被清洁的点
+         cleanedGridStyle(x, y) {
+            if (this.cleanedGrid.some(pos => pos.x == x && pos.y == y))
+               return "background-color:#70F1FF;border-color:#70F1FF;"
+         },
+         //计算序列行
+         gridContent: function (x, y) {
+            if (x == 0 && y == 0) {
+               //处理序列
+               return null
+            } else if (x == 0) {
+               return y;
+            } else if (y == 0) {
+               return x;
+            } else {
+               return null
+            }
+         },
+         //小车前进后位置同步
+         forward() {
+            let pos = this.robot.pos;
+            let { x, y } = pos;
+            if (!this.cleanedGrid.some(c => c.x == x && c.y == y)) {
+               this.cleanedGrid.push({ x: x, y: y })
+            }
+            switch (Math.abs(this.robot.dir % 4)) {
+               case 0:
+                  //遇到障碍物及墙壁不能前行。
+                  if (pos.y - 1 >= 1
+                     && !this.blockPos.some(bPos => pos.x == bPos.x && pos.y - 1 == bPos.y))
+                     pos.y--;
+                  break;
+               case 2:
+                  if (pos.y + 1 <= this.dimension.height
+                     && !this.blockPos.some(bPos => pos.x == bPos.x && pos.y + 1 == bPos.y))
+                     pos.y++;
+                  break;
+               case 1:
+                  if (pos.x - 1 >= 1
+                     && !this.blockPos.some(bPos => pos.x - 1 == bPos.x && pos.y == bPos.y))
+                     pos.x--;
+                  break;
+               case 3:
+                  if (pos.x + 1 <= this.dimension.width
+                     && !this.blockPos.some(bPos => pos.x + 1 == bPos.x && pos.y == bPos.y))
+                     pos.x++;
+                  break;
+            }
+            if (x == pos.x && y == pos.y)
+               console.log(`hit at ${x},${y}`)
+            this.moveRoomba()
+            return;
+         },
+         //小车旋转后方向同步
+         turn(event) {
+            let dir = this.robot.dir
+            dir += event;
+            if (dir == 4) {
+               this.robot.dir = 0
+            } else if (dir == -1) {
+               this.robot.dir = 3
+            } else {
+               this.robot.dir = dir
+            }
+            return;
+         },
+         moveRoomba() {
+            let table = document.querySelector('.map')
+            if (!table) return;
+            let yGrid = this.robot.pos.y;
+            let xGrid = this.robot.pos.x;
+            let roomBa = document.querySelector('#roomba');
+            let targetGrid = table.children[0].children[yGrid].children[xGrid];
+            let { x, y } = targetGrid.getBoundingClientRect();
+            //改变位置
+            roomBa.style.top = y + 1 + 'px';
+            roomBa.style.left = x + 1 + 'px'
+            return;
+         },
+         //监测障碍物
+         detected(event) {
+            let { x, y } = this.robot.pos;
+            let dir = this.robot.dir + event;
+            if (dir == 4) dir = 0;
+            if (dir == -1) dir = 3;
+            //0 上边， 1 左边 , 2 下边， 3 右边
+            switch (dir) {
+               case (0):
+                  this.detectBlock(x, y - 1)
+                  break;
+               case 1:
+                  this.detectBlock(x - 1, y)
+                  break;
+               case 2:
+                  this.detectBlock(x, y + 1)
+                  break;
+               case (3):
+                  this.detectBlock(x + 1, y)
+                  break;
+            }
+         },
+         //测试（x，y）处是否有障碍物
+         detectBlock(x, y) {
+            if (x > this.dimension.width || x < 1 ||
+               y > this.dimension.height || y < 1 ||
+               this.blockPos.some(bPos => x == bPos.x && y == bPos.y)) {
+               this.robot.lastDetected = true;
+               return;
+            } else {
+               this.robot.lastDetected = false
+               return;
+            }
+         }
+      }
+   })
+
+</script>
+
 </html>
