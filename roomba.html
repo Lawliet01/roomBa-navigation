@@ -39,7 +39,7 @@
          border-radius: 50%;
          background-color: burlywood;
          z-index: 1;
-         transition: all 0.01s linear
+         transition: all 0.03s linear
       }
 
       #roomba:hover {
@@ -92,7 +92,6 @@
          </transition>
       </table>
    </div>
-
 </body>
 <script>
    Vue.component('roomba', {
@@ -102,7 +101,7 @@
       },
       data: function () {
          return {
-            moveSpeed: 10,
+            moveSpeed: 30,
             lastCount: 0,
             currentCount: 0
          }
@@ -153,17 +152,36 @@
             }
             //把列地图分成事件
             //相同的列为同一事件中
-            function combinedEvent(from,count = 0) {
+            function combinedEvent(from) {
+               //四种情况：
+               //1.与上一列相同，直接返回
+               //2.与上一列不同，上一列不为空，这一列为空列，是事件结束，返回null参数
+               //3.与上一列不同，两列都不为空，复杂情况，之后解决
+               //4.与上一列不同，上一列为空，这一列不为空，开启新事件
+
+               //跑完了，就返回
                let currentEvent = columnSeperate.shift();
                if (currentEvent == undefined) return;
-               if (JSON.stringify(currentEvent) != JSON.stringify(from)) {
-                  events.push(currentEvent)
+
+               if(from == null){
+                  //情况4
+                  console.log('4');
+                  events.push(currentEvent);
                   from = currentEvent;
-                  count = 0
-               }else {
-                  count ++
+               }else if (JSON.stringify(currentEvent) != JSON.stringify(from)){
+                  if(!currentEvent.some(g=>g=='x')){
+                     console.log('2');
+                     from = null
+                  }else if(!from.some(g=>g=='x')){
+                     events.push(currentEvent);
+                     from = currentEvent;
+                  }else{
+                     console.log('events you havent handle on combinedEvent');
+                  }
+               }else{
+                  from = currentEvent;
                }
-               return combinedEvent(from,count)
+               return combinedEvent(from)
             }
             //分析每个事件
             //只考虑了非重叠事件
@@ -186,38 +204,44 @@
                } else {
                   return {
                      eventName: 'emptyEvent',
-                     f: self.basicMoveMent
+                     f: self.emptyEvent
                   }
                }
             }
             //插入 进入事件
-            function moveIntoEventCalculate(from,to,self){
-               if((from.eventName == 'topEvent'||to.eventName == 'bottomEvent')||
-                  (from.eventName == 'emptyEvent' || to.eventName == 'bottomEvent')){
-                     console.log('happy');
-                  return {
-                     eventName:'moveIntoNextBottomEvent',
-                     f:self.moveIntoNextBottomEvent
-                  }
-               }else{
-                  return {
-                     eventName: 'basicNextEvent',
-                     f:self.basicMoveIntoNextEvent
-                  }
-               }
-            }
+            //function moveIntoEventCalculate(from,to,self){
+            //   if((from.eventName == 'topEvent'||to.eventName == 'bottomEvent')||
+            //      (from.eventName == 'emptyEvent' || to.eventName == 'bottomEvent')){
+            //      return {
+            //         eventName:'moveIntoNextBottomEvent',
+            //         f:self.moveIntoNextBottomEvent
+            //      }
+            //   }else{
+            //      return {
+            //         eventName: 'basicNextEvent',
+            //         f:self.basicMoveIntoNextEvent
+            //      }
+            //   }
+            //}
             function insertedMoveIntoEvent(basicEvents,self){
                let insertedEvent = [];
-               for(let i =0;i<basicEvents.length-1;i++){
-                  insertedEvent.push(basicEvents[i]);
-                  insertedEvent.push(moveIntoEventCalculate(basicEvents[i],basicEvents[i+1],self))
+               for(let i =0;i<basicEvents.length;i++){
+                  if(i != basicEvents.length-1){
+                     insertedEvent.push(basicEvents[i]);
+                     insertedEvent.push({
+                        eventName: 'basicMoveIntoNextEvent',
+                        f: self.moveIntoNextEvent
+                     })
+                  }else{
+                     let lastEvent = basicEvents.pop();
+                     insertedEvent.push(lastEvent);
+                     if(lastEvent.eventName != 'emptyEvent')
+                     insertedEvent.push({
+                        eventName:'lastColumnExecute',
+                        f:self.lastColumnExecute
+                     })
+                  }
                }
-               insertedEvent.push(basicEvents.pop())
-               //插入最后一行的event
-               insertedEvent.push({
-                  eventName:'lastColumnEvent',
-                  f:self.lastColumnExcuted
-               })
                return insertedEvent
             }
          }
@@ -225,12 +249,41 @@
       methods: {
          //小车的运行
          run: async function () {
+            console.log(this.tasks);
+            
             while(this.tasks.length>0){
                let task = this.tasks.shift();
-               console.log('Excute: '+task.eventName)
+               console.log('Execute: '+task.eventName)
                await task.f()
             }
             console.log('done')
+         },
+         emptyEvent(){
+            return new Promise(async resolve=>{
+               let endAtThisColumn = false;
+               while(true){
+                  while (this.detectFront() == false) {
+                     await this.forward()
+                  }
+                  await this.turnLeft()
+                  await this.turnLeft()
+                  while (this.detectFront() == false) {
+                     if(this.detectRight() == true){
+                        endAtThisColumn = true
+                     }
+                     await this.forward()
+                  }
+                  await this.turnRight();
+                  if(endAtThisColumn == true) {
+                     await this.turnRight()
+                     break;
+                  }else{
+                     await this.forward()
+                     await this.turnRight()
+                  }
+               }
+               resolve(true)
+            })
          },
          //处理middleEvent
          middleEvent() {
@@ -267,18 +320,8 @@
                resolve(true)
             })
          },
-         //普通进入下一事件
-         basicMoveIntoNextEvent() {
-            return new Promise(async resolve => {
-               await this.turnLeft();
-               await this.forward();
-               await this.turnRight();
-               this.lastCount = this.currentCount = 0;
-               resolve(true)
-            })
-         },
-         //进入下一bottom事件
-         moveIntoNextBottomEvent() {
+         //进入下一事件
+         moveIntoNextEvent() {
             return new Promise(async resolve => {
                while (this.detectLeft() == true) {
                   await this.forward()
@@ -296,14 +339,19 @@
                //对是否结束当前行动的根据是：count是否不一样以及左边是不是靠墙了
                do {
                   await this.lineMovement()
-               } while ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectLeft() == false)
+                  await this.turnLeft()
+                  //如果下面和左边都是墙，那么count相等，也暂停
+                  if(this.detectLeft() == true && this.detectFront() == true){
+                     await this.turnRight()
+                     break;
+                  }
+                  await this.turnRight()
+               } while (this.lastCount == this.currentCount || this.lastCount == 0)
                resolve(true)
             })
          },
-         //处理最后一个事件
-         lastColumnExcuted() {
-            //未完成,暂时是一个来回
-            return new Promise(async resolve => {
+         lastColumnExecute:function(){
+            return new Promise(async resolve=>{
                while (this.detectFront() == false) {
                   await this.forward()
                }
@@ -337,13 +385,14 @@
                }
                await this.turnLeft()
                await this.turnLeft()
+               this.currentCount++;
                while (this.detectFront() == false) {
                   this.currentCount++;
                   await this.forward()
                }
                await this.turnRight()
+               //停止进入新一行的两种情况：1.count不一样（大多数事件的结束情况）。2.下一行是墙。
                //监测下一列是不是墙，如果是，停止行动。
-               //如果要触发下一事件，则不会进入下一列中
                if ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectFront() == false)
                   await this.forward()
                await this.turnRight()
@@ -406,28 +455,28 @@
       data: {
          //地图的长宽
          dimension: {
-            width: 20,
-            height: 20,
+            width: 6,
+            height: 8,
             gridWidth: 20
          },
          //障碍物的位置
          //障碍物位置是从1开始的，第0行是序列行
          blocks: [
             {
-               from: { x: 3, y: 1 },
-               to: { x: 5, y: 3 }
+               from: { x: 1, y: 1 },
+               to: { x: 1, y: 4 }
             },
             {
-               from: { x: 8, y: 6 },
-               to: { x: 12, y: 12 }
-            },
-            {
-               from:{x:15,y:16},
-               to:{x:18,y:20}
+               from: { x: 3, y: 3 },
+               to: { x: 3, y: 7 }
             },
             //{
-            //   from: {x:25,y:9},
-            //   to: {x:28,y:11}
+            //   from:{x:5,y:10},
+            //   to:{x:5,y:15}
+            //},
+            //{
+            //   from: {x:10,y:8},
+            //   to: {x:14,y:8}
             //},
          ],
          //小车的属性
