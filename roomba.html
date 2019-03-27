@@ -39,12 +39,12 @@
          border-radius: 50%;
          background-color: burlywood;
          z-index: 1;
-         transition: all 0.03s linear
+         transition: all 0.02s linear
       }
 
-      #roomba:hover {
+      .grid:hover,#roomba:hover, {
          cursor: pointer;
-         opacity: 0.8;
+         opacity: 0.8
       }
 
       #roomba::after {
@@ -73,6 +73,36 @@
       .dir_right {
          transform: rotate(90deg);
       }
+      .editPanel{
+         text-align: center
+      }
+      .modeBtn{
+         background-color: greenyellow;
+         border-radius: 5px;
+         border-bottom: 4px solid lightgray;
+      }
+      .modeBtn:focus{
+         outline: none;
+      }
+      .modeBtn:hover{
+         cursor: pointer;
+         transform: translateY(2px)
+      }
+      .editOptions{
+         padding-top:30px;
+      }
+      
+      .clearBtn{
+         transform: translateY(-17px);
+         border-radius:4px;
+      }
+      label{
+         margin-left:20px;
+      }
+      input[type=number]{
+         width:50px;
+      }
+
    </style>
 </head>
 
@@ -81,36 +111,53 @@
       <table class="table-secondary map">
          <tr v-for="y in dimension.height+1">
             <td v-for="x in dimension.width+1" v-bind:class="gridClass(x-1,y-1)"
-               v-bind:style="cleanedGridStyle(x-1,y-1)">
+               v-bind:style="cleanedGridStyle(x-1,y-1)"
+               v-on:mousemove.prevent="toggleBlock()"
+               v-bind:id= gridKey(x-1,y-1)>
                <!-- 减去1是为了使得输入方程的数字能从0开始 -->
                {{gridContent(x-1,y-1)}}
             </td>
          </tr>
-         <transition>
-            <roomBa v-bind:robot='robot' v-bind:map='map' v-on:forward="forward()" v-on:turn="turn($event)"
+            <roomBa v-bind:robot='robot' v-bind:map='map'
+               v-bind:mode = 'mode' 
+               v-show:mode = 'mode == "running"'
+               v-on:forward="forward()" v-on:turn="turn($event)"
                v-on:detect="detected($event)"></roomBa>
-         </transition>
-      </table>
+      </table><br>
+      <div class='editPanel'>
+         <button v-on:click="toggleMode"
+                  class="modeBtn">{{mode}}</button>
+         <div v-if="mode == 'editing'" class='editOptions'>
+            <button v-on:click="cleanAllPos()" class='clearBtn'>clearAll</button>
+            <label>length:
+               <input type="number" v-model.lazy.number.trim='dimension.width'>
+            </label>
+            <label>width:
+               <input type="number" v-model.lazy.number.trim='dimension.height'>
+            </label>
+         </div>
+      </div>
    </div>
 </body>
 <script>
    Vue.component('roomba', {
       props: {
          robot: Object,
-         map: Array
+         map: Array,
+         mode:String
       },
       data: function () {
          return {
-            moveSpeed: 30,
+            moveSpeed: 20,
             lastCount: 0,
             currentCount: 0
          }
       },
       template: `
-                        <div id='roomba' 
-                             v-on:click="run" 
-                             v-bind:class = "directionClass">
-                        </div>`,
+        <div id='roomba' 
+             v-on:click="run" 
+             v-bind:class = "directionClass">
+        </div>`,
       computed: {
          //不同方向时小车返回不同的CSS Class
          directionClass: function () {
@@ -165,12 +212,10 @@
 
                if(from == null){
                   //情况4
-                  console.log('4');
                   events.push(currentEvent);
                   from = currentEvent;
                }else if (JSON.stringify(currentEvent) != JSON.stringify(from)){
                   if(!currentEvent.some(g=>g=='x')){
-                     console.log('2');
                      from = null
                   }else if(!from.some(g=>g=='x')){
                      events.push(currentEvent);
@@ -249,9 +294,7 @@
       methods: {
          //小车的运行
          run: async function () {
-            console.log(this.tasks);
-            
-            while(this.tasks.length>0){
+            while(this.tasks.length>0&&this.mode == 'running'){
                let task = this.tasks.shift();
                console.log('Execute: '+task.eventName)
                await task.f()
@@ -455,21 +498,21 @@
       data: {
          //地图的长宽
          dimension: {
-            width: 6,
-            height: 8,
+            width: 15,
+            height: 15,
             gridWidth: 20
          },
          //障碍物的位置
          //障碍物位置是从1开始的，第0行是序列行
          blocks: [
-            {
-               from: { x: 1, y: 1 },
-               to: { x: 1, y: 4 }
-            },
-            {
-               from: { x: 3, y: 3 },
-               to: { x: 3, y: 7 }
-            },
+            //{
+            //   from: { x: 1, y: 1 },
+            //   to: { x: 1, y: 4 }
+            //},
+            //{
+            //   from: { x: 3, y: 3 },
+            //   to: { x: 3, y: 7 }
+            //},
             //{
             //   from:{x:5,y:10},
             //   to:{x:5,y:15}
@@ -491,7 +534,8 @@
             //上一次对墙的监测情况
             lastDetected: false
          },
-         cleanedGrid: []
+         cleanedGrid: [],
+         mode:'running'
       },
       computed: {
          //算出所有block的点
@@ -499,14 +543,18 @@
             let posGroup = [];
             let blocks = this.blocks
             for (let block of blocks) {
-               let higherY = block.from.y > block.to.y ? block.from.y : block.to.y;
-               let lowerY = higherY == block.to.y ? block.from.y : block.to.y;
-               let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
-               let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
-               for (let y = lowerY; y <= higherY; y++) {
-                  for (let x = lowerX; x <= higherX; x++) {
-                     posGroup.push({ x: x, y: y })
+               if(block.from != null){
+                  let higherY = block.from.y > block.to.y ? block.from.y : block.to.y;
+                  let lowerY = higherY == block.to.y ? block.from.y : block.to.y;
+                  let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
+                  let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
+                  for (let y = lowerY; y <= higherY; y++) {
+                     for (let x = lowerX; x <= higherX; x++) {
+                        posGroup.push({ x: x, y: y })
+                     }
                   }
+               }else{
+                  posGroup.push(block)
                }
             }
             return posGroup
@@ -526,6 +574,10 @@
                map.push(row)
             }
             return map
+         },
+         //根据mode的改变而改变一些属性
+         toggleMode(){
+            
          }
       },
       methods: {
@@ -653,6 +705,33 @@
             } else {
                this.robot.lastDetected = false
                return;
+            }
+         },
+         //每个grid的key
+         gridKey(x,y){
+            return `${x}-${y}`
+         },
+         //切换障碍物
+         toggleBlock(){
+            if(event.buttons == 0 || this.mode == 'running') return
+            if(this.mode == 'running') return;
+            let [_,x,y] = /(\d{1,2})-(\d{1,2})/.exec(event.target.id);
+            if (!this.blocks.some(pos=>pos.x == x &&pos.y ==y )){
+               this.blocks.push({x:x,y:y})
+            }
+         },
+         cleanAllPos(){
+            this.blocks = [] ;
+            this.cleanedGrid = []
+            
+         },
+         toggleMode(){
+            this.mode = this.mode == 'editing'?'running':'editing';
+            if(this.mode == 'running'){
+               this.robot.pos.x = this.dimension.width;
+               this.robot.pos.y = this.dimension.height
+               this.robot.dir = 0;
+               return this.moveRoomba()
             }
          }
       }
