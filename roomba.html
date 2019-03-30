@@ -39,7 +39,7 @@
          border-radius: 50%;
          background-color: burlywood;
          z-index: 1;
-         transition: all 0.02s linear
+         transition: all 0.2s linear
       }
 
       .grid:hover,#roomba:hover, {
@@ -122,7 +122,8 @@
                v-bind:mode = 'mode' 
                v-show:mode = 'mode == "running"'
                v-on:forward="forward()" v-on:turn="turn($event)"
-               v-on:detect="detected($event)"></roomBa>
+               v-on:detect="detected($event)"
+               v-bind:style = 'robotPosOnRender'></roomBa>
       </table><br>
       <div class='editPanel'>
          <button v-on:click="toggleMode"
@@ -148,7 +149,7 @@
       },
       data: function () {
          return {
-            moveSpeed: 20,
+            moveSpeed: 200,
             lastCount: 0,
             currentCount: 0
          }
@@ -176,129 +177,15 @@
                   break;
             }
          },
+         //使用全穷举找出最佳路径
          tasks: function () {
-            let events = [];
-            let self = this;
-            let columnSeperate = compileMap(this.map);
-            let insertedEvent = []
-            combinedEvent()
-            events = events.map(e => { return analyzeEvent(self, e) })
-            return insertedMoveIntoEvent(events,self)
             
-            //解析列地图
-            function compileMap(map){
-               let columnArray = [];
-               for (let x = map[0].length - 1; x >= 0; x--) {
-                  let column = [];
-                  for (let y = 0; y < map.length; y++) {
-                     column.push(map[y][x])
-                  }
-                  columnArray.push(column)
-               }
-               return columnArray
-            }
-            //把列地图分成事件
-            //相同的列为同一事件中
-            function combinedEvent(from) {
-               //四种情况：
-               //1.与上一列相同，直接返回
-               //2.与上一列不同，上一列不为空，这一列为空列，是事件结束，返回null参数
-               //3.与上一列不同，两列都不为空，复杂情况，之后解决
-               //4.与上一列不同，上一列为空，这一列不为空，开启新事件
-
-               //跑完了，就返回
-               let currentEvent = columnSeperate.shift();
-               if (currentEvent == undefined) return;
-
-               if(from == null){
-                  //情况4
-                  events.push(currentEvent);
-                  from = currentEvent;
-               }else if (JSON.stringify(currentEvent) != JSON.stringify(from)){
-                  if(!currentEvent.some(g=>g=='x')){
-                     from = null
-                  }else if(!from.some(g=>g=='x')){
-                     events.push(currentEvent);
-                     from = currentEvent;
-                  }else{
-                     console.log('events you havent handle on combinedEvent');
-                  }
-               }else{
-                  from = currentEvent;
-               }
-               return combinedEvent(from)
-            }
-            //分析每个事件
-            //只考虑了非重叠事件
-            function analyzeEvent(self, event) {
-               if (event.shift() == 'x') {
-                  return {
-                     eventName: 'topEvent',
-                     f: self.basicMoveMent
-                  }
-               } else if (event.pop() == 'x') {
-                  return {
-                     eventName: 'bottomEvent',
-                     f: self.basicMoveMent
-                  }
-               } else if (event.some(b => b == 'x')) {
-                  return {
-                     eventName: 'middleEvent',
-                     f: self.middleEvent
-                  }
-               } else {
-                  return {
-                     eventName: 'emptyEvent',
-                     f: self.emptyEvent
-                  }
-               }
-            }
-            //插入 进入事件
-            //function moveIntoEventCalculate(from,to,self){
-            //   if((from.eventName == 'topEvent'||to.eventName == 'bottomEvent')||
-            //      (from.eventName == 'emptyEvent' || to.eventName == 'bottomEvent')){
-            //      return {
-            //         eventName:'moveIntoNextBottomEvent',
-            //         f:self.moveIntoNextBottomEvent
-            //      }
-            //   }else{
-            //      return {
-            //         eventName: 'basicNextEvent',
-            //         f:self.basicMoveIntoNextEvent
-            //      }
-            //   }
-            //}
-            function insertedMoveIntoEvent(basicEvents,self){
-               let insertedEvent = [];
-               for(let i =0;i<basicEvents.length;i++){
-                  if(i != basicEvents.length-1){
-                     insertedEvent.push(basicEvents[i]);
-                     insertedEvent.push({
-                        eventName: 'basicMoveIntoNextEvent',
-                        f: self.moveIntoNextEvent
-                     })
-                  }else{
-                     let lastEvent = basicEvents.pop();
-                     insertedEvent.push(lastEvent);
-                     if(lastEvent.eventName != 'emptyEvent')
-                     insertedEvent.push({
-                        eventName:'lastColumnExecute',
-                        f:self.lastColumnExecute
-                     })
-                  }
-               }
-               return insertedEvent
-            }
          }
       },
       methods: {
          //小车的运行
          run: async function () {
-            while(this.tasks.length>0&&this.mode == 'running'){
-               let task = this.tasks.shift();
-               console.log('Execute: '+task.eventName)
-               await task.f()
-            }
+            await this.basicMoveMent()
             console.log('done')
          },
          emptyEvent(){
@@ -325,15 +212,6 @@
                      await this.turnRight()
                   }
                }
-               resolve(true)
-            })
-         },
-         //处理middleEvent
-         middleEvent() {
-            return new Promise(async resolve => {
-               await this.basicMoveMent()
-               await this.moveIntoSubevent();
-               await this.basicMoveMent()
                resolve(true)
             })
          },
@@ -444,7 +322,6 @@
          },
          //小车的动作
          forward() {
-            let dom = document.querySelector('#roomba');
             let self = this;
             return new Promise((resolve) => {
                self.$emit('forward')
@@ -491,9 +368,9 @@
    let roomMap = new Vue({
       el: '#roomMap',
       mounted: function () {
-         this.robot.pos.x = this.dimension.width;
-         this.robot.pos.y = this.dimension.height
-         return this.moveRoomba()
+         //this.robot.pos.x = this.dimension.width;
+         //this.robot.pos.y = this.dimension.height
+         //return this.moveRoomba()
       },
       data: {
          //地图的长宽
@@ -575,9 +452,11 @@
             }
             return map
          },
-         //根据mode的改变而改变一些属性
-         toggleMode(){
-            
+         robotPosOnRender(){
+            let x = this.dimension.gridWidth*this.robot.pos.x -5 ;
+            let y = this.dimension.gridWidth * this.robot.pos.y -1;
+            //改变位置
+            return `top:${y}px;left:${x}px`
          }
       },
       methods: {
@@ -644,7 +523,7 @@
             }
             if (x == pos.x && y == pos.y)
                console.log(`hit at ${x},${y}`)
-            this.moveRoomba()
+            //this.moveRoomba()
             return;
          },
          //小车旋转后方向同步
@@ -658,19 +537,6 @@
             } else {
                this.robot.dir = dir
             }
-            return;
-         },
-         moveRoomba() {
-            let table = document.querySelector('.map')
-            if (!table) return;
-            let yGrid = this.robot.pos.y;
-            let xGrid = this.robot.pos.x;
-            let roomBa = document.querySelector('#roomba');
-            let targetGrid = table.children[0].children[yGrid].children[xGrid];
-            let { x, y } = targetGrid.getBoundingClientRect();
-            //改变位置
-            roomBa.style.top = y + 1 + 'px';
-            roomBa.style.left = x + 1 + 'px'
             return;
          },
          //监测障碍物
@@ -714,24 +580,25 @@
          //切换障碍物
          toggleBlock(){
             if(event.buttons == 0 || this.mode == 'running') return
-            if(this.mode == 'running') return;
+
             let [_,x,y] = /(\d{1,2})-(\d{1,2})/.exec(event.target.id);
             if (!this.blocks.some(pos=>pos.x == x &&pos.y ==y )){
                this.blocks.push({x:x,y:y})
             }
          },
+         //清楚格式
          cleanAllPos(){
             this.blocks = [] ;
             this.cleanedGrid = []
-            
          },
+         //开启running mode的时候把robot放置右下角
          toggleMode(){
             this.mode = this.mode == 'editing'?'running':'editing';
             if(this.mode == 'running'){
                this.robot.pos.x = this.dimension.width;
                this.robot.pos.y = this.dimension.height
                this.robot.dir = 0;
-               return this.moveRoomba()
+               //return this.moveRoomba()
             }
          }
       }
