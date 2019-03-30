@@ -30,6 +30,8 @@
 
       .block {
          background-color: rgb(206, 105, 74);
+         border-width: 1px;
+         border-style: solid
       }
 
       #roomba {
@@ -177,26 +179,50 @@
          },
          //使用穷举找出最佳路径
          tasks: function () {
-            
-         }
+            //基础mapProps设置
+            let mapArray = this.map;
+            let robotIndex = { xIndex: this.robot.pos.x - 1, yIndex: this.robot.pos.y - 1 };
+            let robotDir = this.robot.dir;
+            let mapProps = { mapArray, robotIndex, robotDir }
+            //基础行为集合
+            let actions = [ 'turnLeft', 'turnRight',
+               'fullBackAndForthMovementLeft', 'fullBackAndForthMovementRight',
+               'fullBackAndForthAndClimbLeft', 'fullBackAndForthAndClimbRight']
+            let solutions = [{actionList:[],props:mapProps}]
+            for (let i = 0; i < solutions.length; i++) {
+               let { actionList, props } = solutions[i]
+               for (let action of actions) {
+                  if (action != 'turnLeft' && action!='turnRight' &&action == actionList.slice(-1)) continue;
+                  let newMapProps = this.mapTest(props, action);
+                  let map = newMapProps.mapArray;
+                  //测试后可以改为只返回list
+                  if (this.isDone(map)) return actionList.concat(action)
+                  if (solutions.length>20000) {
+                     console.log(solutions.slice(19993))
+                     console.log('hard to find a solution')
+                     return null;
+                  }
+                  solutions.push({ actionList: actionList.concat(action), props: newMapProps })
+               }
+            }
+         },
       },
       methods: {
-         //处理string
+         isDone(map){
+            if (map.some(row=>row.some(each=>each == '.'))) return false;
+            return true
+         },
+         //处理action之后的map，返回一个全新的map。
          mapTest(mapProps,action){
             //mapProps包含了mapArray,robotIndex,robotDir
             //最后返回一个新的mapProps
             //用JSON.stringify(JSON.parse(object))来实现deepCopy
             let newMapProps = JSON.parse(JSON.stringify(mapProps));
-            //涂初始点。
-            let {robotDir} = newMapProps;
+            //根据不同的action调用不同函数
             if(action == 'turnLeft'){
-               robotDir = robotDir+1>3?0:robotDir+1
-               newMapProps.robotDir = robotDir;
-               return newMapProps;
+               return turn(newMapProps,'left')
             }else if (action == 'turnRight'){
-               robotDir = robotDir -1 < 0 ? 3 : robotDir-1
-               newMapProps.robotDir = robotDir;
-               return newMapProps
+               return turn(newMapProps, 'right')
             }else if (action == 'straightLineHitAndStop'){
                return straightLineAction(newMapProps)
             }else if (action == 'fullBackAndForthMovementLeft'){
@@ -210,11 +236,30 @@
             }else{
                throw new Error('no such action:' + action)
             }
+            //转弯
+            function turn(newMapProps,direction){
+               let { robotDir } = newMapProps;
+               if (direction == 'left'){
+                  robotDir = robotDir + 1 > 3 ? 0 : robotDir + 1
+                  newMapProps.robotDir = robotDir;
+               }else if(direction == 'right'){
+                  robotDir = robotDir - 1 < 0 ? 3 : robotDir - 1
+                  newMapProps.robotDir = robotDir;
+               }else {
+                  throw new Error ('no such direction' + direction)
+               }
+               return newMapProps
+            }
+
             //直行撞击
             function straightLineAction(newMapProps){
                let { mapArray, robotIndex, robotDir } = newMapProps;
+               
                //涂初始点。
                let {xIndex,yIndex} = robotIndex;
+               if (xIndex == undefined) throw new Error('check' + newMapProps.mapArray)
+               
+               
                mapArray[yIndex][xIndex] = 'o'
                if(robotDir == 0&& yIndex - 1 >= 0&&mapArray[yIndex-1][xIndex]!='x'){
                   mapArray[yIndex - 1][xIndex] = 'o';
@@ -236,13 +281,19 @@
                   return newMapProps
                }
             }
+
             //充分来回
             function fullBackAndForthAction(newMapProps,movingDir){
                //跟实际行进的逻辑一样
-               let { mapArray, robotIndex, robotDir } = newMapProps;
-               let { xIndex, yIndex } = robotIndex;
-               let {nextX,nextY} = getNextPos(xIndex,yIndex,robotDir,movingDir)
                let updatedMapProps = straightLineAction(newMapProps);
+               updatedMapProps = turn(updatedMapProps,'left');
+               updatedMapProps = turn(updatedMapProps,'left');
+               updatedMapProps = straightLineAction(newMapProps);
+               updatedMapProps = turn(updatedMapProps, 'left');
+               updatedMapProps = turn(updatedMapProps, 'left');
+               let { mapArray, robotIndex, robotDir } = updatedMapProps;
+               let { xIndex, yIndex } = robotIndex;
+               let { nextX, nextY } = getNextPos(xIndex, yIndex, robotDir, movingDir)
                if(!testBlock(nextX,nextY,mapArray)){
                   updatedMapProps.robotIndex.xIndex = nextX;
                   updatedMapProps.robotIndex.yIndex = nextY;
@@ -253,6 +304,7 @@
                   return updatedMapProps
                }
             }
+            
             //充分来回及越墙爬行
             function backAndForthAndClimbAction(newMapProps,movingDir){
                let updatedMapProps = fullBackAndForthAction(newMapProps,movingDir)
@@ -284,7 +336,6 @@
                 }else{
                    //如果是因为前方撞墙停止，则倒退一格
                    //倒退一格
-                   console.log('good')
                    updatedMapProps.robotIndex.xIndex = lastX;
                    updatedMapProps.robotIndex.yIndex = lastY;
                 }
@@ -330,17 +381,48 @@
          },
          //小车的运行
          run: async function () {
-              let mapArray = this.map;
-              let robotIndex = {xIndex:this.robot.pos.x - 1,yIndex:this.robot.pos.y -1};
-              let robotDir = this.robot.dir;
-            //测试
-            //robotIndex.xIndex = 14;
+            console.log(this.tasks);
+            let tasks = this.tasks;
+            if(tasks == null) return;
+            while(tasks.length > 0){
+               let task = tasks.shift();
+               console.log('Execute: ' + task)
+               switch (task) {
+                  case 'turnLeft':
+                     await this.turn('left')
+                     break;
+                  case 'turnRight':
+                     await this.turn('right')
+                     break;
+                  case 'straightLineHitAndStop':
+                     await this.straightLineHitAndStop()
+                     break;
+                  case 'fullBackAndForthMovementLeft':
+                     await this.fullBackAndForthMovement('left');
+                     break;
+                  case 'fullBackAndForthMovementRight':
+                     await this.fullBackAndForthMovement('right');
+                     break;
+                  case 'fullBackAndForthAndClimbLeft':
+                     await this.fullBackAndForthAndClimb('left')
+                     break;
+                  case 'fullBackAndForthAndClimbRight':
+                     await this.fullBackAndForthAndClimb('right')
+                     break;
+               }
+            }
+            
+            //let mapArray = this.map;
+            //let robotIndex = { xIndex: this.robot.pos.x - 1, yIndex: this.robot.pos.y - 1 };
+            //let robotDir = this.robot.dir;
+            //robotIndex.xIndex = 0;
             //robotIndex.yIndex = 0;
-            //robotDir = 2;
-              let mapProps = {mapArray,robotIndex,robotDir}
-              let newArray = this.mapTest(mapProps,'fullBackAndForthAndClimbRight')
-              console.log(newArray)
-            //await this.fullBackAndForthAndClimb('left')
+            //let mapProps = { mapArray, robotIndex, robotDir }
+            //let newArray = this.mapTest(mapProps,'fullBackAndForthAndClimbLeft')
+            //newArray = this.mapTest(newArray,"fullBackAndForthAndClimbLeft")
+            //console.log(newArray);
+            
+            
             console.log('done')
          },
          //充分来回行径，靠墙后爬墙
@@ -575,7 +657,7 @@
             let y = this.dimension.gridWidth * this.robot.pos.y -1;
             //改变位置
             return `top:${y}px;left:${x}px`
-         }
+         },
       },
       methods: {
          //算出每个block的属性
