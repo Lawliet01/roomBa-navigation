@@ -39,7 +39,7 @@
          border-radius: 50%;
          background-color: burlywood;
          z-index: 1;
-         transition: all 0.2s linear
+         transition: all 0.02s linear
       }
 
       .grid:hover,#roomba:hover, {
@@ -127,7 +127,7 @@
       </table><br>
       <div class='editPanel'>
          <button v-on:click="toggleMode"
-                  class="modeBtn">{{mode}}</button>
+                  class="modeBtn" >{{mode == 'running'?'editing':'running'}}</button>
          <div v-if="mode == 'editing'" class='editOptions'>
             <button v-on:click="cleanAllPos()" class='clearBtn'>clearAll</button>
             <label>length:
@@ -149,9 +149,7 @@
       },
       data: function () {
          return {
-            moveSpeed: 200,
-            lastCount: 0,
-            currentCount: 0
+            moveSpeed: 20,
          }
       },
       template: `
@@ -177,150 +175,271 @@
                   break;
             }
          },
-         //使用全穷举找出最佳路径
+         //使用穷举找出最佳路径
          tasks: function () {
             
          }
       },
       methods: {
+         //处理string
+         mapTest(mapProps,action){
+            //mapProps包含了mapArray,robotIndex,robotDir
+            //最后返回一个新的mapProps
+            //用JSON.stringify(JSON.parse(object))来实现deepCopy
+            let newMapProps = JSON.parse(JSON.stringify(mapProps));
+            //涂初始点。
+            let {robotDir} = newMapProps;
+            if(action == 'turnLeft'){
+               robotDir = robotDir+1>3?0:robotDir+1
+               newMapProps.robotDir = robotDir;
+               return newMapProps;
+            }else if (action == 'turnRight'){
+               robotDir = robotDir -1 < 0 ? 3 : robotDir-1
+               newMapProps.robotDir = robotDir;
+               return newMapProps
+            }else if (action == 'straightLineHitAndStop'){
+               return straightLineAction(newMapProps)
+            }else if (action == 'fullBackAndForthMovementLeft'){
+               return fullBackAndForthAction(newMapProps,'left')
+            } else if (action == 'fullBackAndForthMovementRight') {
+               return fullBackAndForthAction(newMapProps,'right')
+            }else if (action == 'fullBackAndForthAndClimbLeft'){
+               return backAndForthAndClimbAction(newMapProps,'left')
+            }else if (action == 'fullBackAndForthAndClimbRight') {
+               return backAndForthAndClimbAction(newMapProps,'right')
+            }else{
+               throw new Error('no such action:' + action)
+            }
+            //直行撞击
+            function straightLineAction(newMapProps){
+               let { mapArray, robotIndex, robotDir } = newMapProps;
+               //涂初始点。
+               let {xIndex,yIndex} = robotIndex;
+               mapArray[yIndex][xIndex] = 'o'
+               if(robotDir == 0&& yIndex - 1 >= 0&&mapArray[yIndex-1][xIndex]!='x'){
+                  mapArray[yIndex - 1][xIndex] = 'o';
+                  robotIndex.yIndex -- ;
+                  return straightLineAction(newMapProps)
+               }else if (robotDir == 1&& xIndex - 1>=0 &&mapArray[yIndex][xIndex-1]!='x'){
+                  mapArray[yIndex][xIndex - 1] = 'o';
+                  robotIndex.xIndex --;
+                  return straightLineAction(newMapProps)
+               }else if (robotDir == 2&& yIndex+1 < mapArray[0].length&& mapArray[yIndex +1][xIndex] != 'x') {
+                  mapArray[yIndex + 1][xIndex] = 'o';
+                  robotIndex.yIndex ++;
+                  return straightLineAction(newMapProps)
+               }else if (robotDir == 3 && xIndex+1< mapArray.length&&mapArray[yIndex ][xIndex +1] != 'x'){
+                  mapArray[yIndex][xIndex + 1] = 'o';
+                  robotIndex.xIndex ++;
+                  return straightLineAction(newMapProps)
+               }else {
+                  return newMapProps
+               }
+            }
+            //充分来回
+            function fullBackAndForthAction(newMapProps,movingDir){
+               //跟实际行进的逻辑一样
+               let { mapArray, robotIndex, robotDir } = newMapProps;
+               let { xIndex, yIndex } = robotIndex;
+               let {nextX,nextY} = getNextPos(xIndex,yIndex,robotDir,movingDir)
+               let updatedMapProps = straightLineAction(newMapProps);
+               if(!testBlock(nextX,nextY,mapArray)){
+                  updatedMapProps.robotIndex.xIndex = nextX;
+                  updatedMapProps.robotIndex.yIndex = nextY;
+                  return fullBackAndForthAction(updatedMapProps,movingDir)
+               }else{
+                  updatedMapProps.robotIndex.xIndex = xIndex;
+                  updatedMapProps.robotIndex.yIndex = yIndex;
+                  return updatedMapProps
+               }
+            }
+            //充分来回及越墙爬行
+            function backAndForthAndClimbAction(newMapProps,movingDir){
+               let updatedMapProps = fullBackAndForthAction(newMapProps,movingDir)
+               let { mapArray, robotIndex, robotDir } = updatedMapProps;
+               let { xIndex, yIndex } = robotIndex;
+               let nextFrontPos = getNextPos(xIndex,yIndex,robotDir,'front')
+               let nextDetectPos = getNextPos(xIndex,yIndex,robotDir,movingDir)
+               let nextX = nextFrontPos.nextX;
+               let nextY = nextFrontPos.nextY;
+               let nextDetectX = nextDetectPos.nextX;
+               let nextDetectY = nextDetectPos.nextY;
+               let lastX,lastY; //保存上一步
+               //开始爬行
+               while(!testBlock(nextX,nextY,mapArray)&&testBlock(nextDetectX,nextDetectY,mapArray)){
+                  //沿着墙壁方向找非墙壁的grid
+                  nextFrontPos = getNextPos(nextX,nextY,robotDir,'front');
+                  lastX = nextX;
+                  lastY = nextY;
+                  nextX = nextFrontPos.nextX;
+                  nextY = nextFrontPos.nextY;
+                  nextDetectPos = getNextPos(lastX, lastY,robotDir,movingDir)
+                  nextDetectX = nextDetectPos.nextX;
+                  nextDetectY = nextDetectPos.nextY
+               }
+                if(!testBlock(nextDetectX, nextDetectY, mapArray)){
+                   updatedMapProps.robotIndex.xIndex = nextDetectX;
+                   updatedMapProps.robotIndex.yIndex = nextDetectY;
+                   updatedMapProps.mapArray[nextDetectY][nextDetectX] = 'o'
+                }else{
+                   //如果是因为前方撞墙停止，则倒退一格
+                   //倒退一格
+                   console.log('good')
+                   updatedMapProps.robotIndex.xIndex = lastX;
+                   updatedMapProps.robotIndex.yIndex = lastY;
+                }
+               return updatedMapProps
+            }
+            //测试该障碍物
+            function testBlock(x,y,map){
+               if(x>=map[0].length||y>=map.length
+                  ||x<0||y<0|| map[y][x] == 'x') return true;
+               return false
+            }
+            //获得当前位置下一个方向的位置
+            function getNextPos(x,y,robotDir,dir){
+               switch (dir) {
+                  case 'left':
+                     dir = 1
+                     break;
+                  case 'right':
+                     dir = -1
+                     break;
+                  case 'front':
+                     dir = 0;
+                     break;
+               }
+               let absoluteDir = dir + robotDir;
+               absoluteDir = absoluteDir == -1 ? 3 : absoluteDir;
+               absoluteDir = absoluteDir == 4 ? 0 : absoluteDir
+               switch (absoluteDir) {
+                  case 0:
+                     return {nextX:x,nextY:y-1}
+                     break;
+                  case 1:
+                     return { nextX: x -1, nextY: y  }
+                     break;
+                  case 2:
+                     return { nextX: x , nextY: y+1 }
+                     break;
+                  case 3:
+                     return { nextX: x +1, nextY: y }
+                     break;
+               }
+            }
+         },
          //小车的运行
          run: async function () {
-            await this.basicMoveMent()
+              let mapArray = this.map;
+              let robotIndex = {xIndex:this.robot.pos.x - 1,yIndex:this.robot.pos.y -1};
+              let robotDir = this.robot.dir;
+            //测试
+            //robotIndex.xIndex = 14;
+            //robotIndex.yIndex = 0;
+            //robotDir = 2;
+              let mapProps = {mapArray,robotIndex,robotDir}
+              let newArray = this.mapTest(mapProps,'fullBackAndForthAndClimbRight')
+              console.log(newArray)
+            //await this.fullBackAndForthAndClimb('left')
             console.log('done')
          },
-         emptyEvent(){
+         //充分来回行径，靠墙后爬墙
+         fullBackAndForthAndClimb(direction){
+            let flipDirection = direction == 'left' ? 'right' : 'left';
             return new Promise(async resolve=>{
-               let endAtThisColumn = false;
+               await this.fullBackAndForthMovement(direction);
+               while(this.detect(direction)&&!this.detect('front')){
+                  await this.forward()
+               }
+               if(!this.detect('front')){
+                  await this.turn(direction);
+                  await this.forward()
+                  await this.turn(flipDirection)
+                  //最后方向并没有调正，这要跟mapTest匹配
+               }
+               resolve(true)
+            })
+         },
+         //充分来回行径，靠墙停止
+         fullBackAndForthMovement:function(direction){
+            let flipDirection = direction == 'left' ? 'right' : 'left';
+            return new Promise(async resolve=>{
                while(true){
-                  while (this.detectFront() == false) {
+                  //开始运行
+                  while (this.detect('front') == false) {
                      await this.forward()
                   }
-                  await this.turnLeft()
-                  await this.turnLeft()
-                  while (this.detectFront() == false) {
-                     if(this.detectRight() == true){
-                        endAtThisColumn = true
-                     }
+                  await this.turnAround()
+                  while (this.detect('front') == false) {
                      await this.forward()
                   }
-                  await this.turnRight();
-                  if(endAtThisColumn == true) {
-                     await this.turnRight()
+                  await this.turn(flipDirection)
+                  if (this.detect('front')) {
+                     await this.turn(flipDirection);
                      break;
-                  }else{
-                     await this.forward()
-                     await this.turnRight()
                   }
+                  await this.forward();
+                  await this.turn(flipDirection);
                }
                resolve(true)
             })
          },
-         //进入下一子事件
-         moveIntoSubevent() {
-            return new Promise(async resolve => {
-               do {
-                  await this.forward()
-               } while (this.detectRight() == false)
-               do {
-                  await this.forward()
-               } while (this.detectRight() == true)
-               await this.turnRight()
-               while (true) {
-                  await this.forward()
-                  if (this.detectRight() == false) {
-                     await this.goBackOneGrid()
-                     break;
-                  } else if (this.detectFront() == true) {
-                     await this.turnLeft()
-                     break;
-                  } else {
-                     continue
-                  }
-               }
-               this.lastCount = this.currentCount = 0;
-               resolve(true)
-            })
-         },
-         //进入下一事件
-         moveIntoNextEvent() {
-            return new Promise(async resolve => {
-               while (this.detectLeft() == true) {
-                  await this.forward()
-               }
-               await this.turnLeft()
-               await this.forward()
-               await this.turnRight();
-               this.lastCount = this.currentCount = 0;
-               resolve(true)
-            })
-         },
-         //基础的行径 && 空事件 && top事件的行径
-         basicMoveMent: function () {
-            return new Promise(async resolve => {
-               //对是否结束当前行动的根据是：count是否不一样以及左边是不是靠墙了
-               do {
-                  await this.lineMovement()
-                  await this.turnLeft()
-                  //如果下面和左边都是墙，那么count相等，也暂停
-                  if(this.detectLeft() == true && this.detectFront() == true){
-                     await this.turnRight()
-                     break;
-                  }
-                  await this.turnRight()
-               } while (this.lastCount == this.currentCount || this.lastCount == 0)
-               resolve(true)
-            })
-         },
-         lastColumnExecute:function(){
+         //依赖count改变的来回行径
+         // basicBackAndForthMovement: function (direction) {
+         //    let lastCount = 0;
+         //    let currentCount = 0
+         //    let flipDirection = direction == 'left'?'right':'left';
+         //    return new Promise(async resolve => {
+         //       //对是否结束当前行动的根据是：count是否不一样以及是不是靠墙了
+         //       do {
+         //          //重置时间
+         //          lastCount = currentCount ;
+         //          currentCount = 0;
+         //          //开始运行
+         //          while (this.detect('front') == false) {
+         //             await this.forward()
+         //          }
+         //          await this.turnAround()
+         //          currentCount++;
+         //          while (this.detect('front') == false) {
+         //             //回来的时候才开始计算count
+         //             currentCount++;
+         //             await this.forward()
+         //          }
+         //          //如果下一列是墙或count不相等，则停止运行；
+         //          //否则，前进一步掉头继续
+         //          await this.turn(flipDirection)
+         //          if(this.detect('front')){
+         //             await this.turn(flipDirection);
+         //             break;
+         //          }else{
+         //             await this.forward();
+         //             await this.turn(flipDirection) ;
+         //          }
+         //          if(currentCount != lastCount&&lastCount != 0) break;
+         //       } while (true)
+         //       resolve(true)
+         //    })
+         // },
+         //直行撞墙停止
+         straightLineHitAndStop(){
             return new Promise(async resolve=>{
-               while (this.detectFront() == false) {
+                while (this.detect('front') == false) {
                   await this.forward()
                }
-               await this.turnLeft()
-               await this.turnLeft()
-               while (this.detectFront() == false) {
-                  await this.forward()
-               }
-               resolve(true)
-            })
-         },
-         //往后退一格
-         goBackOneGrid() {
-            return new Promise(async resolve => {
-               await this.turnLeft();
-               await this.turnLeft();
-               await this.forward();
-               await this.turnRight()
-               resolve(true)
-            })
-         },
-         //每行的行径
-         lineMovement() {
-            return new Promise(async resolve => {
-               //重置时间
-               this.lastCount = this.currentCount;
-               this.currentCount = 0;
-               //开始运行
-               while (this.detectFront() == false) {
-                  await this.forward()
-               }
-               await this.turnLeft()
-               await this.turnLeft()
-               this.currentCount++;
-               while (this.detectFront() == false) {
-                  this.currentCount++;
-                  await this.forward()
-               }
-               await this.turnRight()
-               //停止进入新一行的两种情况：1.count不一样（大多数事件的结束情况）。2.下一行是墙。
-               //监测下一列是不是墙，如果是，停止行动。
-               if ((this.lastCount == this.currentCount || this.lastCount == 0) && this.detectFront() == false)
-                  await this.forward()
-               await this.turnRight()
                resolve(true)
             })
          },
          //小车的动作
+         turnAround(){
+            //注意，trunAround不是算法里面的基础行为，因为一个turnArround有可能不能造成state改变。
+            //而且turnAround只是单纯的简化代码量。
+            return new Promise(async resolve=>{
+               await this.turn('left')
+               await this.turn('left')
+               resolve(true)
+            })
+         },
          forward() {
             let self = this;
             return new Promise((resolve) => {
@@ -330,37 +449,33 @@
                }, self.moveSpeed)
             })
          },
-         turnLeft() {
+         turn(direction) {
             let self = this;
+            let dir = direction == 'left'?1:-1
             return new Promise((resolve) => {
-               self.$emit('turn', 1)
-               setTimeout(() => {
-                  resolve(true)
-               }, self.moveSpeed)
-            })
-         },
-         turnRight() {
-            let self = this;
-            return new Promise((resolve) => {
-               self.$emit('turn', -1)
+               self.$emit('turn', dir)
                setTimeout(() => {
                   resolve(true)
                }, self.moveSpeed)
             })
          },
          //监测小车前左右有没有墙
-         detectFront() {
-            this.$emit('detect', 0)
-            return this.robot.lastDetected
+         detect(direction) {
+            let dir;
+            switch (direction) {
+               case 'front':
+                  dir = 0
+                  break;
+               case 'left':
+                  dir = 1;
+                  break;
+               case 'right':
+                  dir = -1;
+                  break;
+            }
+            this.$emit('detect', dir)
+            return this.robot.lastDetected;
          },
-         detectLeft() {
-            this.$emit('detect', 1)
-            return this.robot.lastDetected
-         },
-         detectRight() {
-            this.$emit('detect', -1)
-            return this.robot.lastDetected
-         }
       }
    })
 
@@ -421,16 +536,19 @@
             let blocks = this.blocks
             for (let block of blocks) {
                if(block.from != null){
+                  //这部分用于大面积设置初始block
                   let higherY = block.from.y > block.to.y ? block.from.y : block.to.y;
                   let lowerY = higherY == block.to.y ? block.from.y : block.to.y;
                   let higherX = block.from.x > block.to.x ? block.from.x : block.to.x;
                   let lowerX = higherX == block.to.x ? block.from.x : block.to.x;
                   for (let y = lowerY; y <= higherY; y++) {
                      for (let x = lowerX; x <= higherX; x++) {
+                        if(x==0||y==0) continue;
                         posGroup.push({ x: x, y: y })
                      }
                   }
                }else{
+                  
                   posGroup.push(block)
                }
             }
@@ -543,9 +661,9 @@
          detected(event) {
             let { x, y } = this.robot.pos;
             let dir = this.robot.dir + event;
-            if (dir == 4) dir = 0;
-            if (dir == -1) dir = 3;
             //0 上边， 1 左边 , 2 下边， 3 右边
+            dir = dir == 4?0:dir;
+            dir = dir == -1?3:dir;
             switch (dir) {
                case (0):
                   this.detectBlock(x, y - 1)
@@ -582,7 +700,7 @@
             if(event.buttons == 0 || this.mode == 'running') return
 
             let [_,x,y] = /(\d{1,2})-(\d{1,2})/.exec(event.target.id);
-            if (!this.blocks.some(pos=>pos.x == x &&pos.y ==y )){
+            if (!this.blocks.some(pos=>pos.x == x &&pos.y ==y)&&x!=0&&y!=0){
                this.blocks.push({x:x,y:y})
             }
          },
