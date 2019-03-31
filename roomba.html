@@ -113,6 +113,15 @@
       input[type=number] {
          width: 50px;
       }
+      .taskList{
+         width:80%;
+         margin: auto;
+         margin-top: 50px;
+         text-align: center;
+      }
+      .errorMsg{
+         border:1px solid lightblue
+      }
    </style>
 </head>
 
@@ -129,6 +138,7 @@
          </tr>
          <roomBa v-bind:robot='robot' v-bind:map='map' v-bind:mode='mode' v-show:mode='mode == "running"'
             v-on:forward="forward()" v-on:turn="turn($event)" v-on:detect="detected($event)"
+            v-on:outputtasklist ="outputtasklist($event)"
             v-bind:style='robotPosOnRender'></roomBa>
       </table><br>
       <div class='editPanel'>
@@ -143,6 +153,10 @@
             </label>
          </div>
       </div>
+      <div class='taskList'>
+         <p v-html="errorMsg" class='errorMsg'></p>
+         <p v-for='item in taskList'>{{item}}</p>
+      </div>
    </div>
 </body>
 <script>
@@ -155,6 +169,7 @@
       data: function () {
          return {
             moveSpeed: 20,
+            showTask:false
          }
       },
       template: `
@@ -183,6 +198,7 @@
          //使用穷举找出最佳路径
          tasks: function () {
             //基础mapProps设置
+            let self = this;
             let mapArray = this.map;
             let robotIndex = { xIndex: this.robot.pos.x - 1, yIndex: this.robot.pos.y - 1 };
             let robotDir = this.robot.dir;
@@ -190,64 +206,64 @@
 
             //初始化solutions
             let bestSolutionCount = this.countUnCleanedGrid(mapArray)
-            let solutions = [{ actionList: [], props: mapProps ,count:bestSolutionCount}]
+            let solutions = [{ actionList: [], props: mapProps, count: bestSolutionCount }]
             let currentBestSolution = solutions[0];
 
             //基础行为集合
             let actions = ['turnLeft', 'turnRight',
                'fullBackAndForthMovementLeft', 'fullBackAndForthMovementRight',]
-            
+
             for (let i = 0; i < solutions.length; i++) {
                let { actionList, props } = solutions[i]
                for (let action of actions) {
                   //消除一些无意义的行为
                   if (action != 'turnLeft' && action != 'turnRight' && action == actionList.slice(-1)) continue;
-                  if(action == 'turnLeft' && actionList.slice(-1) == 'turnRight') continue;
+                  if (action == 'turnLeft' && actionList.slice(-1) == 'turnRight') continue;
                   if (action == 'turnRight' && actionList.slice(-1) == 'turnLeft') continue;
 
                   //执行action
                   let newMapProps = this.mapTest(props, action);
                   let count = this.countUnCleanedGrid(newMapProps.mapArray)
-                  let solution = { actionList: actionList.concat(action), props: newMapProps,count:count }
+                  let solution = { actionList: actionList.concat(action), props: newMapProps, count: count }
 
                   //测试是否全部扫完
                   if (count == 0) {
+                     console.log(solution);
+                     self.$emit('outputtasklist',solution)
                      return solution.actionList;
-                  }else if(count < bestSolutionCount){
+                  } else if (count < bestSolutionCount) {
                      bestSolutionCount = count;
                      currentBestSolution = solution;
                   }
-
-                  
                   //push solution
                   solutions.push(solution)
-                  
                   //如果计算量过大，就停止执行
                   if (solutions.length > 20000) {
                      console.log('hard to find a perfect solution');
                      console.log('return the best solution found currently');
                      console.log(currentBestSolution);
-                     
-                     return bestSolutionCount.actionList
-                     
-                     
+                     self.$emit('outputtasklist', currentBestSolution)
+                     return currentBestSolution.actionList
                   }
                }
             }
          },
       },
       methods: {
-         countUnCleanedGrid(map,solution) {
-            return map.reduce((total,current)=>{
-               return total + current.reduce((sum,each)=>{
-                  let unCleanedGrid = each == '.'?1:0;
-                  return sum+unCleanedGrid
-               },0)
-            },0)
-
+         countUnCleanedGrid(map, solution) {
+            return map.reduce((total, current) => {
+               return total + current.reduce((sum, each) => {
+                  let unCleanedGrid = each == '.' ? 1 : 0;
+                  return sum + unCleanedGrid
+               }, 0)
+            }, 0)
          },
          //处理action之后的map，返回一个全新的map。
          mapTest(mapProps, action) {
+            if (mapProps.mapArray[0].length == 16) {
+               console.log(mapProps);
+               throw new Error('mapProps bug')
+            }
             //mapProps包含了mapArray,robotIndex,robotDir
             //最后返回一个新的mapProps
             //用JSON.stringify(JSON.parse(object))来实现deepCopy
@@ -282,33 +298,28 @@
             //直行撞击
             function straightLineAction(newMapProps) {
                let { mapArray, robotIndex, robotDir } = newMapProps;
-                try{
-                  //涂初始点。
-                  let { xIndex, yIndex } = robotIndex;
-                  mapArray[yIndex][xIndex] = 'o'
-                  if (robotDir == 0 && yIndex - 1 >= 0 && mapArray[yIndex - 1][xIndex] != 'x') {
-                     mapArray[yIndex - 1][xIndex] = 'o';
-                     robotIndex.yIndex--;
-                     return straightLineAction(newMapProps)
-                  } else if (robotDir == 1 && xIndex - 1 >= 0 && mapArray[yIndex][xIndex - 1] != 'x') {
-                     mapArray[yIndex][xIndex - 1] = 'o';
-                     robotIndex.xIndex--;
-                     return straightLineAction(newMapProps)
-                  } else if (robotDir == 2 && yIndex + 1 < mapArray[0].length && mapArray[yIndex + 1][xIndex] != 'x') {
-                     mapArray[yIndex + 1][xIndex] = 'o';
-                     robotIndex.yIndex++;
-                     return straightLineAction(newMapProps)
-                  } else if (robotDir == 3 && xIndex + 1 < mapArray.length && mapArray[yIndex][xIndex + 1] != 'x') {
-                     mapArray[yIndex][xIndex + 1] = 'o';
-                     robotIndex.xIndex++;
-                     return straightLineAction(newMapProps)
-                  } else {
-                     return newMapProps
-                  }
-               }catch(err){
-                  console.log(newMapProps);
-                  
-                  throw new Error(err)
+
+               //涂初始点。
+               let { xIndex, yIndex } = robotIndex;
+               mapArray[yIndex][xIndex] = 'o'
+               if (robotDir == 0 && yIndex - 1 >= 0 && mapArray[yIndex - 1][xIndex] != 'x') {
+                  mapArray[yIndex - 1][xIndex] = 'o';
+                  robotIndex.yIndex--;
+                  return straightLineAction(newMapProps)
+               } else if (robotDir == 1 && xIndex - 1 >= 0 && mapArray[yIndex][xIndex - 1] != 'x') {
+                  mapArray[yIndex][xIndex - 1] = 'o';
+                  robotIndex.xIndex--;
+                  return straightLineAction(newMapProps)
+               } else if (robotDir == 2 && yIndex + 1 < mapArray.length && mapArray[yIndex + 1][xIndex] != 'x') {
+                  mapArray[yIndex + 1][xIndex] = 'o';
+                  robotIndex.yIndex++;
+                  return straightLineAction(newMapProps)
+               } else if (robotDir == 3 && xIndex + 1 < mapArray[0].length && mapArray[yIndex][xIndex + 1] != 'x') {
+                  mapArray[yIndex][xIndex + 1] = 'o';
+                  robotIndex.xIndex++;
+                  return straightLineAction(newMapProps)
+               } else {
+                  return newMapProps
                }
             }
 
@@ -346,8 +357,8 @@
                let nextDetectX = nextDetectPos.nextX;
                let nextDetectY = nextDetectPos.nextY;
                let lastX, lastY; //保存上一步
-               lastX = nextX;
-               lastY = nextY;
+               lastX = xIndex;
+               lastY = yIndex;
                //开始爬行
                while (!testBlock(nextX, nextY, mapArray) && testBlock(nextDetectX, nextDetectY, mapArray)) {
                   //沿着墙壁方向找非墙壁的grid
@@ -393,7 +404,7 @@
                }
                let absoluteDir = dir + robotDir;
                absoluteDir = absoluteDir == -1 ? 3 : absoluteDir;
-               absoluteDir = absoluteDir == 4 ? 0 : absoluteDir
+               absoluteDir = absoluteDir == 4 ? 0 : absoluteDir;
                switch (absoluteDir) {
                   case 0:
                      return { nextX: x, nextY: y - 1 }
@@ -412,10 +423,15 @@
          },
          //小车的运行
          run: async function () {
-            console.log(this.tasks);
+            if(this.showTask == false){
+               console.log(this.tasks);
+               this.showTask = true;
+               return
+            }
+            console.log(this.task);
             let tasks = this.tasks;
-            if(tasks == null) return;
-            while(tasks.length > 0){
+            if (tasks == null) return;
+            while (tasks.length > 0) {
                let task = tasks.shift();
                console.log('Execute: ' + task)
                switch (task) {
@@ -444,6 +460,7 @@
             // let newArray = this.mapTest(mapProps,'fullBackAndForthMovementRight')
             // //newArray = this.mapTest(newArray,"fullBackAndForthAndClimbLeft")
             // console.log(newArray);
+            this.showTask = false;
             console.log('done')
          },
          //充分来回行径，靠墙后爬墙
@@ -451,14 +468,14 @@
             let flipDirection = direction == 'left' ? 'right' : 'left';
             return new Promise(async resolve => {
                await this.fullBackAndForthMovement(direction);
+               //爬墙行为
                while (this.detect(direction) && !this.detect('front')) {
                   await this.forward()
                }
-               if (!this.detect('front')) {
+               if (!this.detect(direction)) {
                   await this.turn(direction);
                   await this.forward()
                   await this.turn(flipDirection)
-                  //最后方向并没有调正，这要跟mapTest匹配
                   await this.fullBackAndForthAndClimb(direction)
                }
                resolve(true)
@@ -601,27 +618,7 @@
          //障碍物的位置
          //障碍物位置是从1开始的，第0行是序列行
          blocks: [
-            {
-               from: { x: 1, y: 1 },
-               to: { x: 3, y: 4 }
-            },
-            {
-               from:{x:8,y:1},
-               to:{x:15,y:1}
-            },
-            {
-               from:{x:10,y:2},
-               to:{x:14,y:2}
-            },
-            [14,3],[14,4],
-            {
-               from:{x:10,y:5},
-               to:{x:13,y:5}
-            },
-            [10,6],[3,10],[4,10],[5,10],[5,11],[5,12],[6,12],[6,13],[7,13],
-            [8,12],[8,13],[10,11],[11,11],[12,11],[13,13],[12,12],[12,13]
-            
-            
+
          ],
          //小车的属性
          //位置从1开始算
@@ -636,7 +633,9 @@
             lastDetected: false
          },
          cleanedGrid: [],
-         mode: 'running'
+         mode: 'running',
+         taskList:[],
+         errorMsg:""
       },
       computed: {
          //算出所有block的点
@@ -686,6 +685,20 @@
          },
       },
       methods: {
+         //获得任务的list
+         outputtasklist(solution){
+            let newSolution = JSON.parse(JSON.stringify(solution))
+            console.log(newSolution)
+            this.taskList = newSolution.actionList;
+            console.log('new solution');
+            
+            if (newSolution.count != 0){
+               this.errorMsg = "未能找到完美方案,未打扫位置数量：<strong>"+ newSolution.count + "</strong>"
+            }else{
+               this.errorMsg = '已找到完美方案:'
+            }
+            
+         },
          //算出每个block的属性
          gridClass: function (x, y) {
             let className = ""
@@ -815,7 +828,9 @@
          //清楚格式
          cleanAllPos() {
             this.blocks = [];
-            this.cleanedGrid = []
+            this.cleanedGrid = [];
+            this.taskList = [];
+            this.errorMsg = "";
          },
          //开启running mode的时候把robot放置右下角
          toggleMode() {
