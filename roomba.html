@@ -187,57 +187,64 @@
             let robotIndex = { xIndex: this.robot.pos.x - 1, yIndex: this.robot.pos.y - 1 };
             let robotDir = this.robot.dir;
             let mapProps = { mapArray, robotIndex, robotDir }
+
+            //初始化solutions
+            let bestSolutionCount = this.countUnCleanedGrid(mapArray)
+            let solutions = [{ actionList: [], props: mapProps ,count:bestSolutionCount}]
+            let currentBestSolution = solutions[0];
+
             //基础行为集合
             let actions = ['turnLeft', 'turnRight',
                'fullBackAndForthMovementLeft', 'fullBackAndForthMovementRight',]
-            let solutions = [{ actionList: [], props: mapProps }]
+            
             for (let i = 0; i < solutions.length; i++) {
                let { actionList, props } = solutions[i]
                for (let action of actions) {
                   //消除一些无意义的行为
                   if (action != 'turnLeft' && action != 'turnRight' && action == actionList.slice(-1)) continue;
+                  if(action == 'turnLeft' && actionList.slice(-1) == 'turnRight') continue;
+                  if (action == 'turnRight' && actionList.slice(-1) == 'turnLeft') continue;
 
                   //执行action
                   let newMapProps = this.mapTest(props, action);
+                  let count = this.countUnCleanedGrid(newMapProps.mapArray)
+                  let solution = { actionList: actionList.concat(action), props: newMapProps,count:count }
 
                   //测试是否全部扫完
-                  let map = newMapProps.mapArray;
-                  if (this.isDone(map)) {
-                     return actionList.concat(action)
+                  if (count == 0) {
+                     return solution.actionList;
+                  }else if(count < bestSolutionCount){
+                     bestSolutionCount = count;
+                     currentBestSolution = solution;
                   }
 
+                  
+                  //push solution
+                  solutions.push(solution)
+                  
                   //如果计算量过大，就停止执行
                   if (solutions.length > 20000) {
-                     console.log(solutions.slice(19993))
-                     console.log('hard to find a solution')
-                     return null;
+                     console.log('hard to find a perfect solution');
+                     console.log('return the best solution found currently');
+                     console.log(currentBestSolution);
+                     
+                     return bestSolutionCount.actionList
+                     
+                     
                   }
-
-                  //push solution
-                  solutions.push({ actionList: actionList.concat(action), props: newMapProps })
-
-                  ////删除前面没用的solution，减少缓存
-                  //if(actionList.length - solutions[0].actionList.length > 1){
-                  //   solutions.shift();
-                  //   console.log(solutions);
-                  //   
-                  //}else{
-                  //   i++
-                  //   console.log(i);
-                  //   
-                  //}
-
-
                }
             }
          },
       },
       methods: {
-         isDone(map) {
-            if (map.some(row => row.some(each => each == '.'))) return false;
-            console.log(map);
+         countUnCleanedGrid(map,solution) {
+            return map.reduce((total,current)=>{
+               return total + current.reduce((sum,each)=>{
+                  let unCleanedGrid = each == '.'?1:0;
+                  return sum+unCleanedGrid
+               },0)
+            },0)
 
-            return true
          },
          //处理action之后的map，返回一个全新的map。
          mapTest(mapProps, action) {
@@ -275,27 +282,33 @@
             //直行撞击
             function straightLineAction(newMapProps) {
                let { mapArray, robotIndex, robotDir } = newMapProps;
-               //涂初始点。
-               let { xIndex, yIndex } = robotIndex;
-               mapArray[yIndex][xIndex] = 'o'
-               if (robotDir == 0 && yIndex - 1 >= 0 && mapArray[yIndex - 1][xIndex] != 'x') {
-                  mapArray[yIndex - 1][xIndex] = 'o';
-                  robotIndex.yIndex--;
-                  return straightLineAction(newMapProps)
-               } else if (robotDir == 1 && xIndex - 1 >= 0 && mapArray[yIndex][xIndex - 1] != 'x') {
-                  mapArray[yIndex][xIndex - 1] = 'o';
-                  robotIndex.xIndex--;
-                  return straightLineAction(newMapProps)
-               } else if (robotDir == 2 && yIndex + 1 < mapArray[0].length && mapArray[yIndex + 1][xIndex] != 'x') {
-                  mapArray[yIndex + 1][xIndex] = 'o';
-                  robotIndex.yIndex++;
-                  return straightLineAction(newMapProps)
-               } else if (robotDir == 3 && xIndex + 1 < mapArray.length && mapArray[yIndex][xIndex + 1] != 'x') {
-                  mapArray[yIndex][xIndex + 1] = 'o';
-                  robotIndex.xIndex++;
-                  return straightLineAction(newMapProps)
-               } else {
-                  return newMapProps
+                try{
+                  //涂初始点。
+                  let { xIndex, yIndex } = robotIndex;
+                  mapArray[yIndex][xIndex] = 'o'
+                  if (robotDir == 0 && yIndex - 1 >= 0 && mapArray[yIndex - 1][xIndex] != 'x') {
+                     mapArray[yIndex - 1][xIndex] = 'o';
+                     robotIndex.yIndex--;
+                     return straightLineAction(newMapProps)
+                  } else if (robotDir == 1 && xIndex - 1 >= 0 && mapArray[yIndex][xIndex - 1] != 'x') {
+                     mapArray[yIndex][xIndex - 1] = 'o';
+                     robotIndex.xIndex--;
+                     return straightLineAction(newMapProps)
+                  } else if (robotDir == 2 && yIndex + 1 < mapArray[0].length && mapArray[yIndex + 1][xIndex] != 'x') {
+                     mapArray[yIndex + 1][xIndex] = 'o';
+                     robotIndex.yIndex++;
+                     return straightLineAction(newMapProps)
+                  } else if (robotDir == 3 && xIndex + 1 < mapArray.length && mapArray[yIndex][xIndex + 1] != 'x') {
+                     mapArray[yIndex][xIndex + 1] = 'o';
+                     robotIndex.xIndex++;
+                     return straightLineAction(newMapProps)
+                  } else {
+                     return newMapProps
+                  }
+               }catch(err){
+                  console.log(newMapProps);
+                  
+                  throw new Error(err)
                }
             }
 
@@ -588,22 +601,27 @@
          //障碍物的位置
          //障碍物位置是从1开始的，第0行是序列行
          blocks: [
-            //{
-            //   from: { x: 1, y: 1 },
-            //   to: { x: 1, y: 4 }
-            //},
-            //{
-            //   from: { x: 3, y: 3 },
-            //   to: { x: 3, y: 7 }
-            //},
-            //{
-            //   from:{x:5,y:10},
-            //   to:{x:5,y:15}
-            //},
-            //{
-            //   from: {x:10,y:8},
-            //   to: {x:14,y:8}
-            //},
+            {
+               from: { x: 1, y: 1 },
+               to: { x: 3, y: 4 }
+            },
+            {
+               from:{x:8,y:1},
+               to:{x:15,y:1}
+            },
+            {
+               from:{x:10,y:2},
+               to:{x:14,y:2}
+            },
+            [14,3],[14,4],
+            {
+               from:{x:10,y:5},
+               to:{x:13,y:5}
+            },
+            [10,6],[3,10],[4,10],[5,10],[5,11],[5,12],[6,12],[6,13],[7,13],
+            [8,12],[8,13],[10,11],[11,11],[12,11],[13,13],[12,12],[12,13]
+            
+            
          ],
          //小车的属性
          //位置从1开始算
@@ -639,7 +657,6 @@
                      }
                   }
                } else {
-
                   posGroup.push(block)
                }
             }
