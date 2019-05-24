@@ -98,7 +98,7 @@
       }
 
       .editOptions {
-         padding-top: 30px;
+         padding-top: 10px;
       }
 
       .clearBtn {
@@ -116,11 +116,11 @@
       .taskList{
          width:80%;
          margin: auto;
-         margin-top: 50px;
-         text-align: center;
+         margin-top: 5px;
       }
       .errorMsg{
-         border:1px solid lightblue
+         border-bottom:1px solid lightblue;
+         color:red
       }
    </style>
 </head>
@@ -155,7 +155,7 @@
       </div>
       <div class='taskList'>
          <p v-html="errorMsg" class='errorMsg'></p>
-         <p v-for='item in taskList'>{{item}}</p>
+         <p v-for='(item,index) in taskList'>{{index+1}}: {{item}}</p>
       </div>
    </div>
 </body>
@@ -449,17 +449,6 @@
                      break;
                }
             }
-            //测试
-            // let mapArray = this.map;
-            // let robotIndex = { xIndex: this.robot.pos.x - 1, yIndex: this.robot.pos.y - 1 };
-            // let robotDir = this.robot.dir;
-            // //robotIndex.xIndex = 0;
-            // //robotIndex.yIndex = 0;
-            // robotDir = 1;
-            // let mapProps = { mapArray, robotIndex, robotDir }
-            // let newArray = this.mapTest(mapProps,'fullBackAndForthMovementRight')
-            // //newArray = this.mapTest(newArray,"fullBackAndForthAndClimbLeft")
-            // console.log(newArray);
             this.showTask = false;
             console.log('done')
          },
@@ -505,43 +494,6 @@
                resolve(true)
             })
          },
-         //依赖count改变的来回行径
-         // basicBackAndForthMovement: function (direction) {
-         //    let lastCount = 0;
-         //    let currentCount = 0
-         //    let flipDirection = direction == 'left'?'right':'left';
-         //    return new Promise(async resolve => {
-         //       //对是否结束当前行动的根据是：count是否不一样以及是不是靠墙了
-         //       do {
-         //          //重置时间
-         //          lastCount = currentCount ;
-         //          currentCount = 0;
-         //          //开始运行
-         //          while (this.detect('front') == false) {
-         //             await this.forward()
-         //          }
-         //          await this.turnAround()
-         //          currentCount++;
-         //          while (this.detect('front') == false) {
-         //             //回来的时候才开始计算count
-         //             currentCount++;
-         //             await this.forward()
-         //          }
-         //          //如果下一列是墙或count不相等，则停止运行；
-         //          //否则，前进一步掉头继续
-         //          await this.turn(flipDirection)
-         //          if(this.detect('front')){
-         //             await this.turn(flipDirection);
-         //             break;
-         //          }else{
-         //             await this.forward();
-         //             await this.turn(flipDirection) ;
-         //          }
-         //          if(currentCount != lastCount&&lastCount != 0) break;
-         //       } while (true)
-         //       resolve(true)
-         //    })
-         // },
          //直行撞墙停止
          straightLineHitAndStop() {
             return new Promise(async resolve => {
@@ -688,9 +640,22 @@
          //获得任务的list
          outputtasklist(solution){
             let newSolution = JSON.parse(JSON.stringify(solution))
-            console.log(newSolution)
-            this.taskList = newSolution.actionList;
-            console.log('new solution');
+            this.taskList = newSolution.actionList.map(action=>{
+               switch (action) {
+                  case 'turnLeft':
+                     return '左转'
+                     break;
+                  case 'turnRight':
+                     return '右转'
+                     break;
+                  case 'fullBackAndForthMovementLeft':
+                     return '完全左行'
+                     break;
+                  case 'fullBackAndForthMovementRight':
+                     return '完全右行'
+                     break;
+               }
+            })
             
             if (newSolution.count != 0){
                this.errorMsg = "未能找到完美方案,未打扫位置数量：<strong>"+ newSolution.count + "</strong>"
