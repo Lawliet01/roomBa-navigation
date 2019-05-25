@@ -45,8 +45,7 @@
       }
 
       .grid:hover,
-      #roomba:hover,
-         {
+      #roomba:hover {
          cursor: pointer;
          opacity: 0.8
       }
@@ -113,14 +112,16 @@
       input[type=number] {
          width: 50px;
       }
-      .taskList{
-         width:80%;
+
+      .taskList {
+         width: 80%;
          margin: auto;
          margin-top: 5px;
       }
-      .errorMsg{
-         border-bottom:1px solid lightblue;
-         color:red
+
+      .errorMsg {
+         border-bottom: 1px solid lightblue;
+         color: red
       }
    </style>
 </head>
@@ -137,12 +138,11 @@
             </td>
          </tr>
          <roomBa v-bind:robot='robot' v-bind:map='map' v-bind:mode='mode' v-show:mode='mode == "running"'
-            v-on:forward="forward()" v-on:turn="turn($event)" v-on:detect="detected($event)"
-            v-on:outputtasklist ="outputtasklist($event)"
-            v-bind:style='robotPosOnRender'></roomBa>
+            v-on:forward="forward()" v-on:turn="turn($event)" v-on:detect="detected($event)" v-on:isrunning="isRunning = $event"
+            v-on:outputtasklist="outputtasklist($event)" v-bind:style='robotPosOnRender'></roomBa>
       </table><br>
       <div class='editPanel'>
-         <button v-on:click="toggleMode" class="modeBtn">{{mode == 'running'?'editing':'running'}}</button>
+         <button v-on:click="toggleMode" class="modeBtn" :disabled='isRunning'>{{mode == 'running'?'editing':'running'}}</button>
          <div v-if="mode == 'editing'" class='editOptions'>
             <button v-on:click="cleanAllPos()" class='clearBtn'>clearAll</button>
             <label>length:
@@ -169,7 +169,7 @@
       data: function () {
          return {
             moveSpeed: 20,
-            showTask:false
+            showTask: false
          }
       },
       template: `
@@ -229,7 +229,7 @@
                   //测试是否全部扫完
                   if (count == 0) {
                      console.log(solution);
-                     self.$emit('outputtasklist',solution)
+                     self.$emit('outputtasklist', solution)
                      return solution.actionList;
                   } else if (count < bestSolutionCount) {
                      bestSolutionCount = count;
@@ -423,14 +423,14 @@
          },
          //小车的运行
          run: async function () {
-            if(this.showTask == false){
+            if (this.showTask == false) {
                console.log(this.tasks);
                this.showTask = true;
                return
             }
-            console.log(this.task);
             let tasks = this.tasks;
             if (tasks == null) return;
+            await this.isRunning(true)
             while (tasks.length > 0) {
                let task = tasks.shift();
                console.log('Execute: ' + task)
@@ -449,6 +449,7 @@
                      break;
                }
             }
+            await this.isRunning(false)
             this.showTask = false;
             console.log('done')
          },
@@ -510,6 +511,12 @@
             return new Promise(async resolve => {
                await this.turn('left')
                await this.turn('left')
+               resolve(true)
+            })
+         },
+         isRunning(check){
+            return new Promise(resolve=>{
+               this.$emit('isrunning',check)
                resolve(true)
             })
          },
@@ -586,8 +593,9 @@
          },
          cleanedGrid: [],
          mode: 'running',
-         taskList:[],
-         errorMsg:""
+         taskList: [],
+         errorMsg: "",
+         isRunning:false
       },
       computed: {
          //算出所有block的点
@@ -638,9 +646,9 @@
       },
       methods: {
          //获得任务的list
-         outputtasklist(solution){
+         outputtasklist(solution) {
             let newSolution = JSON.parse(JSON.stringify(solution))
-            this.taskList = newSolution.actionList.map(action=>{
+            this.taskList = newSolution.actionList.map(action => {
                switch (action) {
                   case 'turnLeft':
                      return '左转'
@@ -656,13 +664,13 @@
                      break;
                }
             })
-            
-            if (newSolution.count != 0){
-               this.errorMsg = "未能找到完美方案,未打扫位置数量：<strong>"+ newSolution.count + "</strong>"
-            }else{
+
+            if (newSolution.count != 0) {
+               this.errorMsg = "未能找到完美方案,未打扫位置数量：<strong>" + newSolution.count + "</strong>"
+            } else {
                this.errorMsg = '已找到完美方案:'
             }
-            
+
          },
          //算出每个block的属性
          gridClass: function (x, y) {
