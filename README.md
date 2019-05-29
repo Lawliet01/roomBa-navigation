@@ -4,7 +4,7 @@ use recursive function to find the best way of cleanning for roomBa
 ## Use
 
 ###  1. Visit the page 
-Visit: https://lawliet01.github.io/roomBa-road-navigation/ \
+Visit: https://lawliet01.github.io/roomBa-navigation/ \
 The page should look like this:\
 ![alt fail](./README/inital.png)
 
